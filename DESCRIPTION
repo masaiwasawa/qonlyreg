@@ -15,3 +15,5 @@ Suggests:
     knitr,
     rmarkdown
 VignetteBuilder: knitr
+URL: https://github.com/masaiwasawa/qonlyreg
+BugReports: https://github.com/masaiwasawa/qonlyreg/issues
