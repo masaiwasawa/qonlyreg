@@ -1,9 +1,19 @@
 Package: qonlyreg
-Title: What the Package Does (One Line, Title Case)
+Title: Quantile-Only Regression under Quantile Disclosure
 Version: 0.0.0.9000
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
+    person(
+        "Masamune", "Iwasawa",
+        email = "masamune.iwasawa@gmail.com",
+        role = c("aut", "cre")
+    )
+Description: 
+    Methods for regression analysis when only quantile summaries 
+    of the outcome distribution are available. The package 
+    implements estimation and inference procedures for 
+    quantile-only linear regression, including sharp bounds for 
+    conditional means, partial identification analysis, and 
+    simultaneous confidence regions under quantile disclosure.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

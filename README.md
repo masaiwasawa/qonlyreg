@@ -122,23 +122,23 @@ summary(region)
 #>     y_upper = 10, level = 0.95, B = 1000)
 #> 
 #> Confidence level: 0.95 
-#> Critical value: 2.208467 
+#> Critical value: 2.221278 
 #> 
 #> Adjusted group mean constraints:
 #>      lower    upper
-#> 1 1.253086 4.246914
-#> 2 2.125536 5.374464
+#> 1 1.251654 4.248346
+#> 2 2.123364 5.376636
 
 ci <- confint(region)
 ci
 #> Quantile-only coefficient-wise confidence intervals
 #> 
 #> Confidence level: 0.95 
-#> Critical value: 2.208467 
+#> Critical value: 2.221278 
 #> 
 #>           lower    upper
-#> beta1  1.253086 4.246914
-#> beta2 -2.121378 4.121378
+#> beta1  1.251654 4.248346
+#> beta2 -2.124982 4.124982
 plot(ci)
 ```
 
