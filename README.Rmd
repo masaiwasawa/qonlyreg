@@ -48,7 +48,7 @@ You can install the development version of `qonlyreg` from GitHub:
 
 ```r
 # install.packages("remotes")
-remotes::install_github("YOUR_GITHUB_NAME/qonlyreg")
+remotes::install_github("masaiwasawa/qonlyreg")
 ```
 
 ## Example

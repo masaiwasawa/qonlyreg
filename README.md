@@ -40,7 +40,7 @@ You can install the development version of `qonlyreg` from GitHub:
 
 ``` r
 # install.packages("remotes")
-remotes::install_github("YOUR_GITHUB_NAME/qonlyreg")
+remotes::install_github("masaiwasawa/qonlyreg")
 ```
 
 ## Example
@@ -122,23 +122,23 @@ summary(region)
 #>     y_upper = 10, level = 0.95, B = 1000)
 #> 
 #> Confidence level: 0.95 
-#> Critical value: 2.274026 
+#> Critical value: 2.208467 
 #> 
 #> Adjusted group mean constraints:
 #>      lower    upper
-#> 1 1.245756 4.254244
-#> 2 2.114420 5.385580
+#> 1 1.253086 4.246914
+#> 2 2.125536 5.374464
 
 ci <- confint(region)
 ci
 #> Quantile-only coefficient-wise confidence intervals
 #> 
 #> Confidence level: 0.95 
-#> Critical value: 2.274026 
+#> Critical value: 2.208467 
 #> 
 #>           lower    upper
-#> beta1  1.245756 4.254244
-#> beta2 -2.139824 4.139824
+#> beta1  1.253086 4.246914
+#> beta2 -2.121378 4.121378
 plot(ci)
 ```
 
