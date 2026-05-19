@@ -101,9 +101,13 @@ qlm <- function(qhat, tau, X, n_g, density_floor = 1e-8) {
   vcov_beta <- solve(A, meat %*% solve(A))
   se_beta <- sqrt(diag(vcov_beta))
 
+  if (!is.null(colnames(X))) {
+    names(beta_hat) <- colnames(X)
+  }
+
   out <- list(
     call = match.call(),
-    coefficients = as.numeric(beta_hat),
+    coefficients = beta_hat,
     vcov = vcov_beta,
     se = se_beta,
     m_hat = m_hat,
