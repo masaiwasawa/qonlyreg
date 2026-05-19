@@ -1,10 +1,47 @@
-qlm_omega_bounds <- function(qhat, tau, n_g, density_floor = 1e-8) {
+qlm_density_at_quantiles_with_support <- function(qhat, tau,
+                                                  y_lower, y_upper,
+                                                  density_floor = 1e-8) {
+
+  qhat <- as.numeric(qhat)
+  tau <- as.numeric(tau)
+
+  q_full <- c(y_lower, qhat, y_upper)
+  tau_full <- c(0, tau, 1)
+
+  K <- length(tau)
+
+  fhat <- numeric(K)
+
+  for (k in seq_len(K)) {
+
+    idx <- k + 1
+
+    slope <- (q_full[idx + 1] - q_full[idx - 1]) /
+      (tau_full[idx + 1] - tau_full[idx - 1])
+
+    fhat[k] <- 1 / max(slope, density_floor)
+  }
+
+  pmax(fhat, density_floor)
+}
+
+qlm_omega_bounds <- function(qhat, tau, n_g,
+                             y_lower, y_upper,
+                             density_floor = 1e-8) {
 
   qhat <- as.matrix(qhat)
   tau <- as.numeric(tau)
   n_g <- as.numeric(n_g)
 
   G <- nrow(qhat)
+
+  if (length(y_lower) == 1) {
+    y_lower <- rep(y_lower, G)
+  }
+
+  if (length(y_upper) == 1) {
+    y_upper <- rep(y_upper, G)
+  }
 
   tau_full <- c(0, tau, 1)
   delta_tau <- diff(tau_full)
@@ -16,9 +53,11 @@ qlm_omega_bounds <- function(qhat, tau, n_g, density_floor = 1e-8) {
 
   for (g in seq_len(G)) {
 
-    fhat <- qlm_density_at_quantiles(
+    fhat <- qlm_density_at_quantiles_with_support(
       qhat = qhat[g, ],
       tau = tau,
+      y_lower = y_lower[g],
+      y_upper = y_upper[g],
       density_floor = density_floor
     )
 
@@ -134,6 +173,13 @@ qlm_region <- function(qhat, tau, X, n_g,
     stop("nrow(X) must equal nrow(qhat).")
   }
 
+  if (length(tau) == 1) {
+    warning(
+      "Only one disclosed quantile is available. ",
+      "The covariance matrix is estimated using the known support endpoints."
+    )
+  }
+
   bounds <- qlm_bounds(
     qhat = qhat,
     tau = tau,
@@ -145,6 +191,8 @@ qlm_region <- function(qhat, tau, X, n_g,
     qhat = qhat,
     tau = tau,
     n_g = n_g,
+    y_lower = y_lower,
+    y_upper = y_upper,
     density_floor = density_floor
   )
 

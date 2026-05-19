@@ -57,7 +57,13 @@ qlm <- function(qhat, tau, X, n_g, density_floor = 1e-8) {
   if (any(apply(qhat, 1, is.unsorted))) {
     stop("Each row of qhat must be sorted in increasing order.")
   }
-
+  if (length(tau) < 2) {
+    stop(
+      "qlm() requires at least two disclosed quantiles.",
+      "For partial identification with a single disclosed quantile,",
+      "use qlm_region() with known support bounds."
+    )
+  }
   alpha <- qlm_weights(tau)
 
   m_hat <- as.numeric(qhat %*% alpha)
