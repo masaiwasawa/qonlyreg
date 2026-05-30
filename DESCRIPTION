@@ -7,13 +7,14 @@ Authors@R:
         email = "masamune.iwasawa@gmail.com",
         role = c("aut", "cre")
     )
-Description: 
-    Methods for regression analysis when only quantile summaries 
-    of the outcome distribution are available. The package 
-    implements estimation and inference procedures for 
-    quantile-only linear regression, including sharp bounds for 
-    conditional means, partial identification analysis, and 
-    simultaneous confidence regions under quantile disclosure.
+Description:
+    Methods for regression analysis when only grouped summaries
+    of the outcome distribution are available. The package implements
+    estimation, partial identification, and inference procedures for
+    linear regression models based on disclosed quantiles, reported
+    means, and mixed disclosure. It also provides tools for sharp
+    bounds, simultaneous confidence regions, and treatment-control
+    contrast analysis for two-arm studies and meta-analysis applications.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
