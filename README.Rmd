@@ -54,7 +54,30 @@ You can install the development version of `qonlyreg` from GitHub:
 remotes::install_github("masaiwasawa/qonlyreg")
 ```
 
-## Example
+## Usage
+
+`qlm()` computes a linear regression estimator using reconstructed group means.
+For groups with quantile disclosure, the quantile function is approximated
+by piecewise linear interpolation and the group mean is obtained by
+integrating the resulting quantile function.
+For groups with observed means, the reported mean is used directly.
+
+`qlm_bounds()` constructs sharp bounds for group conditional means under known support restrictions.
+
+`qlm_region()` constructs a simultaneous confidence region under partial identification with a fixed number of disclosed quantiles or mixed disclosure. Coefficient-wise confidence intervals are obtained by projecting this region using `confint()`.
+
+`qlm_contrast_bounds()` and `qlm_contrast_region()` extend these tools to treatment-control contrasts, which are common in two-arm studies and meta-analysis applications.
+
+`qlm_contrast_bounds()` constructs sharp bounds for treatment-control mean
+contrasts.
+
+`qlm_contrast_region()` constructs simultaneous confidence regions for
+treatment-control contrasts and is particularly useful in meta-analysis and
+two-arm study applications.
+
+For point estimation of treatment-control contrasts, users can first construct study-level mean differences and their standard errors from the arm-level summaries, and then apply `qlm()` by treating these differences as observed means.
+
+## Examples
 
 The following example illustrates the basic workflow of the package:
 
@@ -274,26 +297,12 @@ ci
 plot(ci)
 ```
 
-## Interpretation
 
-`qlm()` computes a linear regression estimator using reconstructed group means.
-For groups with quantile disclosure, the quantile function is approximated
-by piecewise linear interpolation and the group mean is obtained by
-integrating the resulting quantile function.
-For groups with observed means, the reported mean is used directly.
-
-`qlm_bounds()` constructs sharp bounds for group conditional means under known support restrictions.
-
-`qlm_region()` constructs a simultaneous confidence region under partial identification with a fixed number of disclosed quantiles or mixed disclosure. Coefficient-wise confidence intervals are obtained by projecting this region using `confint()`.
-
-`qlm_contrast_bounds()` and `qlm_contrast_region()` extend these tools to treatment-control contrasts, which are common in two-arm studies and meta-analysis applications.
-
-For point estimation of treatment-control contrasts, users can first construct study-level mean differences and their standard errors from the arm-level summaries, and then apply `qlm()` by treating these differences as observed means. The contrast-specific functions `qlm_contrast_bounds()` and `qlm_contrast_region()` are designed for partial identification and simultaneous confidence regions for treatment-control contrasts.
 
 ## Citation
 
 If you use `qonlyreg`, please cite:
 
 Iwasawa, M. and Nakanishi, H. (2026). *Quantile-Only Regression:
-Inference and Partial Identification under Quantile Disclosure*. Working paper.
+Inference and Partial Identification under Quantile Disclosure*. Unpublished manuscript.
 

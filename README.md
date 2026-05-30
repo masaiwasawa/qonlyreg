@@ -46,7 +46,39 @@ You can install the development version of `qonlyreg` from GitHub:
 remotes::install_github("masaiwasawa/qonlyreg")
 ```
 
-## Example
+## Usage
+
+`qlm()` computes a linear regression estimator using reconstructed group
+means. For groups with quantile disclosure, the quantile function is
+approximated by piecewise linear interpolation and the group mean is
+obtained by integrating the resulting quantile function. For groups with
+observed means, the reported mean is used directly.
+
+`qlm_bounds()` constructs sharp bounds for group conditional means under
+known support restrictions.
+
+`qlm_region()` constructs a simultaneous confidence region under partial
+identification with a fixed number of disclosed quantiles or mixed
+disclosure. Coefficient-wise confidence intervals are obtained by
+projecting this region using `confint()`.
+
+`qlm_contrast_bounds()` and `qlm_contrast_region()` extend these tools
+to treatment-control contrasts, which are common in two-arm studies and
+meta-analysis applications.
+
+`qlm_contrast_bounds()` constructs sharp bounds for treatment-control
+mean contrasts.
+
+`qlm_contrast_region()` constructs simultaneous confidence regions for
+treatment-control contrasts and is particularly useful in meta-analysis
+and two-arm study applications.
+
+For point estimation of treatment-control contrasts, users can first
+construct study-level mean differences and their standard errors from
+the arm-level summaries, and then apply `qlm()` by treating these
+differences as observed means.
+
+## Examples
 
 The following example illustrates the basic workflow of the package:
 
@@ -126,24 +158,24 @@ summary(region)
 #>     y_upper = 100, B = 1000)
 #> 
 #> Confidence level: 0.95 
-#> Critical value: 2.364316 
+#> Critical value: 2.438377 
 #> 
 #> Adjusted group mean constraints:
 #>       lower    upper
-#> 1  6.191178 41.30882
-#> 2 14.325124 48.17488
-#> 3 22.411777 55.08822
+#> 1  6.032713 41.46729
+#> 2 14.186517 48.31348
+#> 3 22.291547 55.20845
 
 ci <- confint(region)
 ci
 #> Quantile/mean disclosure coefficient-wise confidence intervals
 #> 
 #> Confidence level: 0.95 
-#> Critical value: 2.364316 
+#> Critical value: 2.438377 
 #> 
 #>               lower    upper
-#> intercept  6.191178 41.30882
-#> x         -9.448522 24.44852
+#> intercept  6.032713 41.46729
+#> x         -9.587870 24.58787
 plot(ci)
 ```
 
@@ -246,24 +278,24 @@ summary(region)
 #>     B = 1000)
 #> 
 #> Confidence level: 0.95 
-#> Critical value: 2.334477 
+#> Critical value: 2.354287 
 #> 
 #> Adjusted group mean constraints:
 #>       lower    upper
-#> 1  6.255024 41.24498
-#> 2 21.498285 28.50172
-#> 3 22.460218 55.03978
+#> 1  6.212636 41.28736
+#> 2 21.468569 28.53143
+#> 3 22.428058 55.07194
 
 ci <- confint(region)
 ci
 #> Quantile/mean disclosure coefficient-wise confidence intervals
 #> 
 #> Confidence level: 0.95 
-#> Critical value: 2.334477 
+#> Critical value: 2.354287 
 #> 
 #>               lower    upper
-#> intercept  6.255024 34.54321
-#> x         -6.041497 22.24669
+#> intercept  6.212636 34.63480
+#> x         -6.103373 22.31879
 plot(ci)
 ```
 
@@ -360,59 +392,31 @@ summary(contrast_region)
 #>     B = 1000)
 #> 
 #> Confidence level: 0.95 
-#> Critical value: 2.330066 
+#> Critical value: 2.279484 
 #> 
 #> Adjusted group mean constraints:
-#>        lower     upper
-#> 1 -27.732645 32.232645
-#> 2   1.835053  8.164947
+#>         lower     upper
+#> 1 -29.6435554 34.143555
+#> 2   0.6212539  9.378746
 
 ci <- confint(contrast_region)
 ci
 #> Quantile/mean disclosure coefficient-wise confidence intervals
 #> 
 #> Confidence level: 0.95 
-#> Critical value: 2.330066 
+#> Critical value: 2.279484 
 #> 
-#>              lower    upper
-#> intercept 1.835053 8.164947
+#>               lower    upper
+#> intercept 0.6212539 9.378746
 plot(ci)
 ```
 
 <img src="man/figures/README-contrast-example-1.png" width="100%" />
-
-## Interpretation
-
-`qlm()` computes a linear regression estimator using reconstructed group
-means. For groups with quantile disclosure, the quantile function is
-approximated by piecewise linear interpolation and the group mean is
-obtained by integrating the resulting quantile function. For groups with
-observed means, the reported mean is used directly.
-
-`qlm_bounds()` constructs sharp bounds for group conditional means under
-known support restrictions.
-
-`qlm_region()` constructs a simultaneous confidence region under partial
-identification with a fixed number of disclosed quantiles or mixed
-disclosure. Coefficient-wise confidence intervals are obtained by
-projecting this region using `confint()`.
-
-`qlm_contrast_bounds()` and `qlm_contrast_region()` extend these tools
-to treatment-control contrasts, which are common in two-arm studies and
-meta-analysis applications.
-
-For point estimation of treatment-control contrasts, users can first
-construct study-level mean differences and their standard errors from
-the arm-level summaries, and then apply `qlm()` by treating these
-differences as observed means. The contrast-specific functions
-`qlm_contrast_bounds()` and `qlm_contrast_region()` are designed for
-partial identification and simultaneous confidence regions for
-treatment-control contrasts.
 
 ## Citation
 
 If you use `qonlyreg`, please cite:
 
 Iwasawa, M. and Nakanishi, H. (2026). *Quantile-Only Regression:
-Inference and Partial Identification under Quantile Disclosure*. Working
-paper.
+Inference and Partial Identification under Quantile Disclosure*.
+Unpublished manuscript.
