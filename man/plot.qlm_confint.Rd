@@ -16,5 +16,5 @@ A base R plot is produced. The function returns \code{x} invisibly.
 }
 \description{
 Plot coefficient-wise confidence intervals obtained by projecting
-a quantile-only simultaneous confidence region.
+a simultaneous confidence region.
 }

@@ -1,112 +1,70 @@
-qlm_density_at_quantiles_with_support <- function(qhat, tau,
-                                                  y_lower, y_upper,
-                                                  density_floor = 1e-8) {
-
-  qhat <- as.numeric(qhat)
-  tau <- as.numeric(tau)
-
-  q_full <- c(y_lower, qhat, y_upper)
-  tau_full <- c(0, tau, 1)
-
-  K <- length(tau)
-
-  fhat <- numeric(K)
-
-  for (k in seq_len(K)) {
-
-    idx <- k + 1
-
-    slope <- (q_full[idx + 1] - q_full[idx - 1]) /
-      (tau_full[idx + 1] - tau_full[idx - 1])
-
-    fhat[k] <- 1 / max(slope, density_floor)
-  }
-
-  pmax(fhat, density_floor)
-}
-
-qlm_omega_bounds <- function(qhat, tau, n_g,
-                             y_lower, y_upper,
-                             density_floor = 1e-8) {
-
-  qhat <- as.matrix(qhat)
-  tau <- as.numeric(tau)
-  n_g <- as.numeric(n_g)
-
-  G <- nrow(qhat)
-
-  if (length(y_lower) == 1) {
-    y_lower <- rep(y_lower, G)
-  }
-
-  if (length(y_upper) == 1) {
-    y_upper <- rep(y_upper, G)
-  }
-
-  tau_full <- c(0, tau, 1)
-  delta_tau <- diff(tau_full)
-
-  aL <- delta_tau[-1]
-  aU <- delta_tau[-length(delta_tau)]
-
-  Omega <- matrix(0, nrow = 2 * G, ncol = 2 * G)
-
-  for (g in seq_len(G)) {
-
-    fhat <- qlm_density_at_quantiles_with_support(
-      qhat = qhat[g, ],
-      tau = tau,
-      y_lower = y_lower[g],
-      y_upper = y_upper[g],
-      density_floor = density_floor
-    )
-
-    cov_tau <- outer(tau, tau, function(a, b) pmin(a, b) - a * b)
-    denom <- outer(fhat, fhat, "*")
-    Sigma_g <- cov_tau / denom
-
-    Omega_g <- (sum(n_g) / n_g[g]) *
-      matrix(
-        c(
-          as.numeric(t(aL) %*% Sigma_g %*% aL),
-          as.numeric(t(aL) %*% Sigma_g %*% aU),
-          as.numeric(t(aU) %*% Sigma_g %*% aL),
-          as.numeric(t(aU) %*% Sigma_g %*% aU)
-        ),
-        nrow = 2,
-        byrow = TRUE
-      )
-
-    idx <- c(2 * g - 1, 2 * g)
-    Omega[idx, idx] <- Omega_g
-  }
-
-  Omega
-}
-
-
-#' Simultaneous confidence region from quantile-only partial identification
+#' Simultaneous confidence region from quantile/mean disclosure
 #'
 #' Construct a simultaneous confidence region for regression coefficients
-#' using disclosed group-level quantiles.
+#' using disclosed group-level quantiles, observed means, or mixed disclosure.
 #'
-#' @param qhat A G by K matrix of disclosed sample quantiles.
-#'   Each row corresponds to a group and each column corresponds
-#'   to a quantile level in `tau`. Quantiles must be ordered
-#'   increasingly within each row.
-#' @param tau A numeric vector of length K containing quantile
-#'   levels in (0, 1), sorted in increasing order.
-#' @param X A G by p matrix of group-level covariates.
-#' @param n_g A numeric vector of length G containing group sizes.
+#' The function constructs estimated lower and upper bounds for each group
+#' conditional mean, estimates the covariance matrix of these bounds, and
+#' then forms a simultaneous confidence region for coefficients satisfying
+#' \deqn{
+#'   X_g'\beta \in [\underline m_g, \overline m_g].
+#' }
+#'
+#' @param qhat A G by K matrix of disclosed sample quantiles. Each row
+#'   corresponds to a group and each column corresponds to a quantile level
+#'   in `tau`. This is the legacy common-grid quantile-only interface.
+#'   Ignored if `disclosure` is supplied.
+#' @param tau A numeric vector of length K containing quantile levels in
+#'   (0, 1), sorted in increasing order. This is the legacy common-grid
+#'   quantile-only interface. Ignored if `disclosure` is supplied.
+#' @param X A G by p matrix of group-level covariates. Rows must correspond
+#'   to the groups represented by `qhat` or `disclosure`, in the same order.
+#' @param n_g A numeric vector of length G containing group sizes. This is
+#'   the legacy common-grid quantile-only interface. Ignored if `disclosure`
+#'   is supplied.
 #' @param y_lower A numeric vector of length G, or a scalar, giving known
-#'   lower support endpoints for each group.
+#'   lower support endpoints for each group. For quantile disclosures,
+#'   support bounds must be supplied either through this argument and
+#'   `y_upper`, or through columns `y_lower` and `y_upper` in `disclosure`.
 #' @param y_upper A numeric vector of length G, or a scalar, giving known
-#'   upper support endpoints for each group.
+#'   upper support endpoints for each group. For quantile disclosures,
+#'   support bounds must be supplied either through `y_lower` and this
+#'   argument, or through columns `y_lower` and `y_upper` in `disclosure`.
+#' @param disclosure Optional group-level disclosure object. This may be
+#'   either a list or a data.frame. If supplied, this takes precedence over
+#'   `qhat`, `tau`, `n_g`, `y_lower`, and `y_upper` where applicable.
+#'
+#'   A data.frame input should be in long format. It must contain a group
+#'   identifier column, a `type` column, and an `n` column. The group
+#'   identifier column is detected from one of `group`, `group_id`, `study`,
+#'   `study_id`, or `id`. The `type` column indicates whether each row
+#'   reports a quantile or a mean. Supported values are `quantile`, `q`,
+#'   `quantiles`, `mean`, and `m`.
+#'
+#'   Quantile rows require a `tau` column and one disclosed-value column.
+#'   The disclosed-value column may be named `value`, `qhat`, or `estimate`.
+#'
+#'   Mean rows require either a `mean` column or one disclosed-value column
+#'   named `value`, `qhat`, or `estimate`. For inference with mean
+#'   disclosures, at least one of `var`, `se`, or `sd` must also be supplied.
+#'   Here `var` refers to the variance of the reported mean estimator, not
+#'   the variance of the underlying observations.
+#'
+#'   For quantile disclosures, support bounds must be supplied either
+#'   through columns `y_lower` and `y_upper` in `disclosure` or through
+#'   the function arguments `y_lower` and `y_upper`.
+#'
+#'   A list input should contain one element per group. Each element should
+#'   be a list with `type = "quantile"`, `type = "mean"`, or
+#'   `type = "mean_quantile"`. Quantile disclosures require `tau`, `qhat`,
+#'   `n`, `y_lower`, and `y_upper`, unless support bounds are supplied
+#'   through the function arguments. Mean disclosures require `mean` and
+#'   `n`, and at least one of `var`, `se`, or `sd`.
 #' @param level Confidence level. Default is 0.95.
 #' @param B Number of Gaussian simulation draws used to compute the
 #'   simultaneous critical value.
-#' @param density_floor A positive lower bound used to avoid
-#'   numerical instability in density estimation.
+#' @param density_floor A positive lower bound used to avoid numerical
+#'   instability in density estimation.
 #'
 #' @return
 #' An object of class `"qlm_region"` containing:
@@ -117,91 +75,173 @@ qlm_omega_bounds <- function(qhat, tau, n_g,
 #'   \item{level}{Confidence level.}
 #'   \item{lower_adjusted}{Adjusted lower constraints.}
 #'   \item{upper_adjusted}{Adjusted upper constraints.}
-#'   \item{const_mat}{Constraint matrix defining the simultaneous confidence region.}
+#'   \item{const_mat}{Constraint matrix defining the simultaneous confidence
+#'     region.}
 #'   \item{const_dir}{Constraint directions.}
 #'   \item{const_rhs}{Right-hand side vector of the constraints.}
+#'   \item{disclosure}{Standardized group-level disclosure objects.}
+#'   \item{X}{Group-level covariate matrix.}
+#'   \item{n_g}{Group sizes.}
 #'   \item{call}{Matched function call.}
 #' }
 #'
-#' @examples
-#' set.seed(123)
+#'#' @examples
+#' ## Legacy common-grid quantile-only interface
+#' qhat <- rbind(
+#'   c(10, 15, 20),
+#'   c(20, 25, 30),
+#'   c(30, 35, 40)
+#' )
 #'
-#' N <- 200
-#' G <- 5
-#' tau <- c(0.25, 0.5, 0.75)
+#' tau <- c(0.25, 0.50, 0.75)
 #'
-#' X_grid <- seq(-1, 1, length.out = G)
-#' g <- rep(1:G, length.out = N)
-#' Xg <- X_grid[g]
-#' Y <- 1 + 2 * Xg + rnorm(N)
+#' X <- cbind(
+#'   intercept = 1,
+#'   x = c(0, 1, 2)
+#' )
 #'
-#' qhat_mat <- t(sapply(seq_len(G), function(j) {
-#'   stats::quantile(Y[g == j], probs = tau, type = 1)
-#' }))
-#'
-#' X <- stats::model.matrix(~ X_grid)
-#' n_g <- as.numeric(table(g))
+#' n_g <- c(100, 120, 150)
 #'
 #' region <- qlm_region(
-#'   qhat = qhat_mat,
+#'   qhat = qhat,
 #'   tau = tau,
 #'   X = X,
 #'   n_g = n_g,
-#'   y_lower = -10,
-#'   y_upper = 10,
+#'   y_lower = 0,
+#'   y_upper = 100,
 #'   B = 100
 #' )
 #'
+#' region
+#' confint(region)
+#'
+#' #' ## Disclosure data.frame interface with mixed disclosure
+#' disclosure <- data.frame(
+#'   group = c(
+#'     1, 1, 1,
+#'     2,
+#'     3, 3, 3
+#'   ),
+#'   type = c(
+#'     "quantile", "quantile", "quantile",
+#'     "mean",
+#'     "quantile", "quantile", "quantile"
+#'   ),
+#'   tau = c(
+#'     0.25, 0.50, 0.75,
+#'     NA,
+#'     0.25, 0.50, 0.75
+#'   ),
+#'   value = c(
+#'     10, 15, 20,
+#'     25,
+#'     30, 35, 40
+#'   ),
+#'   n = c(
+#'     100, 100, 100,
+#'     120,
+#'     150, 150, 150
+#'   ),
+#'   se = c(
+#'     NA, NA, NA,
+#'     1.5,
+#'     NA, NA, NA
+#'   )
+#' )
+#'
+#' X <- cbind(
+#'   intercept = 1,
+#'   x = c(0, 1, 2)
+#' )
+#'
+#' region <- qlm_region(
+#'   disclosure = disclosure,
+#'   X = X,
+#'   y_lower = 0,
+#'   y_upper = 100,
+#'   B = 100
+#' )
+#'
+#' region
 #' confint(region)
 #'
 #' @export
-qlm_region <- function(qhat, tau, X, n_g,
-                       y_lower, y_upper,
+qlm_region <- function(qhat = NULL,
+                       tau = NULL,
+                       X,
+                       n_g = NULL,
+                       y_lower = NULL,
+                       y_upper = NULL,
+                       disclosure = NULL,
                        level = 0.95,
                        B = 10000,
                        density_floor = 1e-8) {
 
-  qhat <- as.matrix(qhat)
   X <- as.matrix(X)
-  tau <- as.numeric(tau)
-  n_g <- as.numeric(n_g)
 
-  G <- nrow(qhat)
-  N <- sum(n_g)
-
-  if (nrow(X) != G) {
-    stop("nrow(X) must equal nrow(qhat).")
+  if (!is.numeric(X)) {
+    stop("X must be numeric.")
+  }
+  if (any(!is.finite(X))) {
+    stop("X contains non-finite values.")
+  }
+  if (!is.numeric(level) ||
+      length(level) != 1 ||
+      !is.finite(level) ||
+      level <= 0 ||
+      level >= 1) {
+    stop("level must be a scalar in (0, 1).")
+  }
+  if (!is.numeric(B) ||
+      length(B) != 1 ||
+      !is.finite(B) ||
+      B <= 0) {
+    stop("B must be a positive scalar.")
+  }
+  if (!is.numeric(density_floor) ||
+      length(density_floor) != 1 ||
+      !is.finite(density_floor) ||
+      density_floor <= 0) {
+    stop("density_floor must be a positive finite scalar.")
   }
 
-  if (length(tau) == 1) {
-    warning(
-      "Only one disclosed quantile is available. ",
-      "The covariance matrix is estimated using the known support endpoints."
-    )
-  }
+  B <- as.integer(B)
 
-  bounds <- qlm_bounds(
-    qhat = qhat,
-    tau = tau,
-    y_lower = y_lower,
-    y_upper = y_upper
-  )
-
-  Omega <- qlm_omega_bounds(
+  disclosure <- as_qlm_region_disclosure(
+    disclosure = disclosure,
     qhat = qhat,
     tau = tau,
     n_g = n_g,
     y_lower = y_lower,
-    y_upper = y_upper,
+    y_upper = y_upper
+  )
+
+  G <- length(disclosure)
+  N <- sum(vapply(disclosure, function(d) d$n, numeric(1)))
+
+  if (nrow(X) != G) {
+    stop("nrow(X) must equal the number of groups in disclosure.")
+  }
+
+  qlm_region_warn_disclosure_structure(disclosure)
+
+  bounds <- qlm_region_bounds_from_disclosure(disclosure)
+
+  Omega <- qlm_region_omega_from_disclosure(
+    disclosure = disclosure,
     density_floor = density_floor
   )
 
   omega <- sqrt(diag(Omega))
 
+  if (any(!is.finite(omega))) {
+    stop("Estimated asymptotic standard deviations contain non-finite values.")
+  }
   if (any(omega <= 0)) {
     stop(
       "Estimated asymptotic variances must be strictly positive. ",
-      "This may occur when disclosed quantiles are nearly identical."
+      "This may occur when disclosed quantiles are nearly identical or ",
+      "when mean disclosures have zero or missing variance."
     )
   }
 
@@ -223,6 +263,10 @@ qlm_region <- function(qhat, tau, X, n_g,
   const_dir <- c(rep(">=", G), rep("<=", G))
   const_rhs <- c(lower_adj, upper_adj)
 
+  if (!is.null(colnames(X))) {
+    colnames(const_mat) <- colnames(X)
+  }
+
   out <- list(
     bounds = bounds,
     Omega = Omega,
@@ -233,8 +277,9 @@ qlm_region <- function(qhat, tau, X, n_g,
     const_mat = const_mat,
     const_dir = const_dir,
     const_rhs = const_rhs,
+    disclosure = disclosure,
     X = X,
-    n_g = n_g,
+    n_g = vapply(disclosure, function(d) d$n, numeric(1)),
     call = match.call()
   )
 
@@ -245,11 +290,11 @@ qlm_region <- function(qhat, tau, X, n_g,
 
 #' @export
 print.qlm_region <- function(x, ...) {
-  cat("Quantile-only simultaneous confidence region\n\n")
+  cat("Quantile/mean disclosure simultaneous confidence region\n\n")
   cat("Confidence level:", x$level, "\n")
   cat("Critical value:", x$critical_value, "\n\n")
-  cat("Linear constraints:\n")
-  cat("  const_mat %*% beta  const_dir  const_rhs\n\n")
+  cat("Linear constraints are stored in:\n")
+  cat("  const_mat, const_dir, and const_rhs\n\n")
   cat("Number of constraints:", nrow(x$const_mat), "\n")
   cat("Number of coefficients:", ncol(x$const_mat), "\n")
   invisible(x)
@@ -277,7 +322,7 @@ summary.qlm_region <- function(object, ...) {
 
 #' @export
 print.summary.qlm_region <- function(x, ...) {
-  cat("Quantile-only simultaneous confidence region\n\n")
+  cat("Quantile/mean disclosure simultaneous confidence region\n\n")
 
   cat("Call:\n")
   print(x$call)
@@ -380,7 +425,7 @@ confint.qlm_region <- function(object, parm = NULL, level = NULL, ...) {
 
 #' @export
 print.qlm_confint <- function(x, ...) {
-  cat("Quantile-only coefficient-wise confidence intervals\n\n")
+  cat("Quantile/mean disclosure coefficient-wise confidence intervals\n\n")
   cat("Confidence level:", x$level, "\n")
   cat("Critical value:", x$critical_value, "\n\n")
   print(x$confint)
@@ -405,7 +450,7 @@ summary.qlm_confint <- function(object, ...) {
 
 #' @export
 print.summary.qlm_confint <- function(x, ...) {
-  cat("Quantile-only coefficient-wise confidence intervals\n\n")
+  cat("Quantile/mean disclosure coefficient-wise confidence intervals\n\n")
 
   cat("Call:\n")
   print(x$call)
@@ -423,7 +468,7 @@ print.summary.qlm_confint <- function(x, ...) {
 #' Plot coefficient-wise confidence intervals
 #'
 #' Plot coefficient-wise confidence intervals obtained by projecting
-#' a quantile-only simultaneous confidence region.
+#' a simultaneous confidence region.
 #'
 #' @param x An object of class `"qlm_confint"`.
 #' @param ... Additional arguments, currently ignored.
@@ -476,5 +521,1163 @@ plot.qlm_confint <- function(x, ...) {
 
   graphics::abline(v = 0, lty = 2)
 
+  invisible(x)
+}
+
+
+as_qlm_region_disclosure <- function(disclosure = NULL,
+                                     qhat = NULL,
+                                     tau = NULL,
+                                     n_g = NULL,
+                                     y_lower = NULL,
+                                     y_upper = NULL) {
+  if (!is.null(disclosure)) {
+    if (is.data.frame(disclosure)) {
+      disclosure <- qlm_region_disclosure_from_data_frame(disclosure)
+    } else if (is.list(disclosure)) {
+      if (length(disclosure) == 0) {
+        stop("disclosure must be a non-empty list.")
+      }
+    } else {
+      stop("disclosure must be either a data.frame or a list.")
+    }
+
+    disclosure <- qlm_region_attach_support(
+      disclosure = disclosure,
+      y_lower = y_lower,
+      y_upper = y_upper
+    )
+
+    for (g in seq_along(disclosure)) {
+      disclosure[[g]] <- validate_qlm_region_disclosure_one(
+        disclosure[[g]],
+        group = g
+      )
+    }
+
+    return(disclosure)
+  }
+
+  if (is.null(qhat) ||
+      is.null(tau) ||
+      is.null(n_g) ||
+      is.null(y_lower) ||
+      is.null(y_upper)) {
+    stop(
+      "Either disclosure or qhat, tau, n_g, y_lower, and y_upper ",
+      "must be supplied."
+    )
+  }
+
+  qhat <- as.matrix(qhat)
+  tau <- as.numeric(tau)
+  n_g <- as.numeric(n_g)
+
+  if (!is.numeric(qhat)) {
+    stop("qhat must be numeric.")
+  }
+  if (any(!is.finite(qhat))) {
+    stop("qhat contains non-finite values.")
+  }
+
+  G <- nrow(qhat)
+  K <- ncol(qhat)
+
+  if (length(tau) != K) {
+    stop("length(tau) must equal ncol(qhat).")
+  }
+  if (length(n_g) != G) {
+    stop("length(n_g) must equal nrow(qhat).")
+  }
+
+  y_lower <- qlm_region_recycle_vector(y_lower, G, "y_lower")
+  y_upper <- qlm_region_recycle_vector(y_upper, G, "y_upper")
+
+  disclosure <- vector("list", G)
+
+  for (g in seq_len(G)) {
+    disclosure[[g]] <- list(
+      type = "quantile",
+      tau = tau,
+      qhat = as.numeric(qhat[g, ]),
+      n = n_g[g],
+      y_lower = y_lower[g],
+      y_upper = y_upper[g]
+    )
+
+    disclosure[[g]] <- validate_qlm_region_disclosure_one(
+      disclosure[[g]],
+      group = g
+    )
+  }
+
+  disclosure
+}
+
+
+qlm_region_disclosure_from_data_frame <- function(df) {
+  if (!is.data.frame(df)) {
+    stop("df must be a data.frame.")
+  }
+  if (nrow(df) == 0) {
+    stop("disclosure data.frame must have at least one row.")
+  }
+
+  group_col <- qlm_region_find_first_existing_name(
+    names(df),
+    c("group", "group_id", "study", "study_id", "id")
+  )
+
+  if (is.null(group_col)) {
+    stop(
+      "disclosure data.frame must contain a group identifier column. ",
+      "Accepted names are: group, group_id, study, study_id, or id."
+    )
+  }
+
+  if (!"type" %in% names(df)) {
+    stop("disclosure data.frame must contain a type column.")
+  }
+
+  if (!"n" %in% names(df)) {
+    stop("disclosure data.frame must contain an n column.")
+  }
+
+  value_col <- qlm_region_find_first_existing_name(
+    names(df),
+    c("value", "qhat", "estimate")
+  )
+
+  has_mean_col <- "mean" %in% names(df)
+
+  if (is.null(value_col) && !has_mean_col) {
+    stop(
+      "disclosure data.frame must contain either a value/qhat/estimate column ",
+      "or a mean column."
+    )
+  }
+
+  group_values <- unique(df[[group_col]])
+  disclosure <- vector("list", length(group_values))
+
+  for (j in seq_along(group_values)) {
+    group_value <- group_values[j]
+    dg <- df[df[[group_col]] == group_value, , drop = FALSE]
+
+    type_vec <- tolower(as.character(dg$type))
+
+    is_quantile <- type_vec %in% c("quantile", "q", "quantiles")
+    is_mean <- type_vec %in% c("mean", "m")
+
+    if (!all(is_quantile | is_mean)) {
+      stop(
+        "Unsupported type found for group ", group_value, ". ",
+        "Use 'quantile' or 'mean'."
+      )
+    }
+
+    n_unique <- unique(stats::na.omit(as.numeric(dg$n)))
+
+    if (length(n_unique) != 1) {
+      stop("Each group must have exactly one non-missing value of n.")
+    }
+
+    out <- list(
+      group_id = group_value,
+      n = n_unique[1]
+    )
+
+    if (any(is_quantile)) {
+      if (!"tau" %in% names(dg)) {
+        stop("Quantile rows require a tau column.")
+      }
+      if (is.null(value_col)) {
+        stop("Quantile rows require a value, qhat, or estimate column.")
+      }
+
+      q_rows <- dg[is_quantile, , drop = FALSE]
+      tau_g <- as.numeric(q_rows$tau)
+      qhat_g <- as.numeric(q_rows[[value_col]])
+
+      ord <- order(tau_g)
+      tau_g <- tau_g[ord]
+      qhat_g <- qhat_g[ord]
+
+      out$tau <- tau_g
+      out$qhat <- qhat_g
+    }
+
+    if (any(is_mean)) {
+      m_rows <- dg[is_mean, , drop = FALSE]
+
+      if (has_mean_col && any(!is.na(m_rows$mean))) {
+        mean_values <- unique(stats::na.omit(as.numeric(m_rows$mean)))
+      } else if (!is.null(value_col)) {
+        mean_values <- unique(stats::na.omit(as.numeric(m_rows[[value_col]])))
+      } else {
+        mean_values <- numeric(0)
+      }
+
+      if (length(mean_values) != 1) {
+        stop("Each group with mean disclosure must have exactly one mean value.")
+      }
+
+      out$mean <- mean_values[1]
+
+      if ("se" %in% names(m_rows)) {
+        se_values <- unique(stats::na.omit(as.numeric(m_rows$se)))
+        if (length(se_values) > 1) {
+          stop("Each group must have at most one unique se value.")
+        }
+        if (length(se_values) == 1) {
+          out$se <- se_values[1]
+        }
+      }
+
+      if ("var" %in% names(m_rows)) {
+        var_values <- unique(stats::na.omit(as.numeric(m_rows$var)))
+        if (length(var_values) > 1) {
+          stop("Each group must have at most one unique var value.")
+        }
+        if (length(var_values) == 1) {
+          out$var <- var_values[1]
+        }
+      }
+
+      if ("sd" %in% names(m_rows)) {
+        sd_values <- unique(stats::na.omit(as.numeric(m_rows$sd)))
+        if (length(sd_values) > 1) {
+          stop("Each group must have at most one unique sd value.")
+        }
+        if (length(sd_values) == 1) {
+          out$sd <- sd_values[1]
+        }
+      }
+    }
+
+    if ("y_lower" %in% names(dg)) {
+      y_lower_values <- unique(stats::na.omit(as.numeric(dg$y_lower)))
+      if (length(y_lower_values) > 1) {
+        stop("Each group must have at most one unique y_lower value.")
+      }
+      if (length(y_lower_values) == 1) {
+        out$y_lower <- y_lower_values[1]
+      }
+    }
+
+    if ("y_upper" %in% names(dg)) {
+      y_upper_values <- unique(stats::na.omit(as.numeric(dg$y_upper)))
+      if (length(y_upper_values) > 1) {
+        stop("Each group must have at most one unique y_upper value.")
+      }
+      if (length(y_upper_values) == 1) {
+        out$y_upper <- y_upper_values[1]
+      }
+    }
+
+    if (any(is_quantile) && any(is_mean)) {
+      out$type <- "mean_quantile"
+    } else if (any(is_quantile)) {
+      out$type <- "quantile"
+    } else {
+      out$type <- "mean"
+    }
+
+    disclosure[[j]] <- out
+  }
+
+  names(disclosure) <- as.character(group_values)
+  disclosure
+}
+
+
+qlm_region_attach_support <- function(disclosure,
+                                      y_lower = NULL,
+                                      y_upper = NULL) {
+  G <- length(disclosure)
+
+  if (!is.null(y_lower)) {
+    y_lower <- qlm_region_recycle_vector(y_lower, G, "y_lower")
+
+    for (g in seq_len(G)) {
+      if (is.null(disclosure[[g]]$y_lower)) {
+        disclosure[[g]]$y_lower <- y_lower[g]
+      }
+    }
+  }
+
+  if (!is.null(y_upper)) {
+    y_upper <- qlm_region_recycle_vector(y_upper, G, "y_upper")
+
+    for (g in seq_len(G)) {
+      if (is.null(disclosure[[g]]$y_upper)) {
+        disclosure[[g]]$y_upper <- y_upper[g]
+      }
+    }
+  }
+
+  disclosure
+}
+
+
+validate_qlm_region_disclosure_one <- function(d, group) {
+  if (!is.list(d)) {
+    stop("disclosure[[", group, "]] must be a list.")
+  }
+
+  if (is.null(d$type)) {
+    stop("disclosure[[", group, "]] must contain type.")
+  }
+
+  d$type <- tolower(as.character(d$type))
+
+  if (!d$type %in% c("quantile", "mean", "mean_quantile")) {
+    stop(
+      "disclosure[[", group, "]]$type must be one of ",
+      "'quantile', 'mean', or 'mean_quantile'."
+    )
+  }
+
+  if (is.null(d$n) ||
+      length(d$n) != 1 ||
+      !is.finite(d$n) ||
+      d$n <= 0) {
+    stop("disclosure[[", group, "]]$n must be a positive finite scalar.")
+  }
+
+  d$n <- as.numeric(d$n)
+
+  if (d$type %in% c("quantile", "mean_quantile")) {
+    if (is.null(d$tau) || is.null(d$qhat)) {
+      stop(
+        "disclosure[[", group, "]] with type '", d$type,
+        "' must contain tau and qhat."
+      )
+    }
+
+    d$tau <- as.numeric(d$tau)
+    d$qhat <- as.numeric(d$qhat)
+
+    if (length(d$tau) != length(d$qhat)) {
+      stop(
+        "In disclosure[[", group, "]], length(tau) must equal length(qhat)."
+      )
+    }
+    if (length(d$tau) == 0) {
+      stop("disclosure[[", group, "]]$tau must be non-empty.")
+    }
+    if (any(!is.finite(d$tau)) || any(!is.finite(d$qhat))) {
+      stop(
+        "tau and qhat must contain only finite values in disclosure[[",
+        group, "]]."
+      )
+    }
+    if (any(d$tau <= 0 | d$tau >= 1)) {
+      stop("All tau values must lie in (0, 1) in disclosure[[", group, "]].")
+    }
+    if (is.unsorted(d$tau, strictly = TRUE)) {
+      stop("tau must be strictly increasing in disclosure[[", group, "]].")
+    }
+    if (any(diff(d$qhat) < 0)) {
+      stop("qhat must be weakly increasing in disclosure[[", group, "]].")
+    }
+
+    if (is.null(d$y_lower) || is.null(d$y_upper)) {
+      stop(
+        "Quantile disclosure requires y_lower and y_upper in disclosure[[",
+        group, "]]."
+      )
+    }
+
+    d$y_lower <- as.numeric(d$y_lower)
+    d$y_upper <- as.numeric(d$y_upper)
+
+    if (length(d$y_lower) != 1 ||
+        length(d$y_upper) != 1 ||
+        !is.finite(d$y_lower) ||
+        !is.finite(d$y_upper)) {
+      stop(
+        "y_lower and y_upper must be finite scalars in disclosure[[",
+        group, "]]."
+      )
+    }
+
+    if (d$y_lower > d$y_upper) {
+      stop(
+        "In disclosure[[", group,
+        "]], y_lower must be less than or equal to y_upper."
+      )
+    }
+
+    if (d$qhat[1] < d$y_lower) {
+      stop(
+        "In disclosure[[", group,
+        "]], the first disclosed quantile must be greater than or equal to y_lower."
+      )
+    }
+
+    if (d$qhat[length(d$qhat)] > d$y_upper) {
+      stop(
+        "In disclosure[[", group,
+        "]], the last disclosed quantile must be less than or equal to y_upper."
+      )
+    }
+  }
+
+  if (d$type %in% c("mean", "mean_quantile")) {
+    if (is.null(d$mean) ||
+        length(d$mean) != 1 ||
+        !is.finite(d$mean)) {
+      stop(
+        "Mean disclosure requires a finite scalar mean in disclosure[[",
+        group, "]]."
+      )
+    }
+
+    d$mean <- as.numeric(d$mean)
+
+    if (!is.null(d$se)) {
+      if (length(d$se) != 1 || !is.finite(d$se) || d$se <= 0) {
+        stop("disclosure[[", group, "]]$se must be a positive finite scalar.")
+      }
+      d$se <- as.numeric(d$se)
+    }
+
+    if (!is.null(d$var)) {
+      if (length(d$var) != 1 || !is.finite(d$var) || d$var <= 0) {
+        stop("disclosure[[", group, "]]$var must be a positive finite scalar.")
+      }
+      d$var <- as.numeric(d$var)
+    }
+
+    if (!is.null(d$sd)) {
+      if (length(d$sd) != 1 || !is.finite(d$sd) || d$sd <= 0) {
+        stop("disclosure[[", group, "]]$sd must be a positive finite scalar.")
+      }
+      d$sd <- as.numeric(d$sd)
+    }
+
+    if (is.null(d$se) && is.null(d$var) && is.null(d$sd)) {
+      stop(
+        "Mean disclosure in qlm_region() requires uncertainty information: ",
+        "provide se, var, or sd in disclosure[[", group, "]]."
+      )
+    }
+  }
+
+  d
+}
+
+
+qlm_region_bounds_from_disclosure <- function(disclosure) {
+  G <- length(disclosure)
+
+  m_lower <- numeric(G)
+  m_upper <- numeric(G)
+  y_lower <- rep(NA_real_, G)
+  y_upper <- rep(NA_real_, G)
+  weights_lower <- vector("list", G)
+  weights_upper <- vector("list", G)
+
+  for (g in seq_len(G)) {
+    d <- disclosure[[g]]
+
+    if (d$type == "quantile") {
+      bound_g <- qlm_region_bounds_one_quantile_group(
+        qhat = d$qhat,
+        tau = d$tau,
+        y_lower = d$y_lower,
+        y_upper = d$y_upper
+      )
+
+      m_lower[g] <- bound_g$m_lower
+      m_upper[g] <- bound_g$m_upper
+      y_lower[g] <- d$y_lower
+      y_upper[g] <- d$y_upper
+      weights_lower[[g]] <- bound_g$weights_lower
+      weights_upper[[g]] <- bound_g$weights_upper
+    }
+
+    if (d$type %in% c("mean", "mean_quantile")) {
+      m_lower[g] <- d$mean
+      m_upper[g] <- d$mean
+      y_lower[g] <- if (!is.null(d$y_lower)) d$y_lower else NA_real_
+      y_upper[g] <- if (!is.null(d$y_upper)) d$y_upper else NA_real_
+      weights_lower[[g]] <- NA_real_
+      weights_upper[[g]] <- NA_real_
+    }
+  }
+
+  out <- list(
+    m_lower = m_lower,
+    m_upper = m_upper,
+    y_lower = y_lower,
+    y_upper = y_upper,
+    weights_lower = weights_lower,
+    weights_upper = weights_upper
+  )
+
+  class(out) <- "qlm_bounds"
+  out
+}
+
+
+qlm_region_bounds_one_quantile_group <- function(qhat,
+                                                 tau,
+                                                 y_lower,
+                                                 y_upper) {
+  tau_full <- c(0, tau, 1)
+  q_full <- c(y_lower, qhat, y_upper)
+
+  delta_tau <- diff(tau_full)
+
+  m_lower <- sum(delta_tau * q_full[-length(q_full)])
+  m_upper <- sum(delta_tau * q_full[-1])
+
+  weights_lower <- delta_tau[-1]
+  weights_upper <- delta_tau[-length(delta_tau)]
+
+  list(
+    m_lower = m_lower,
+    m_upper = m_upper,
+    weights_lower = weights_lower,
+    weights_upper = weights_upper
+  )
+}
+
+
+qlm_region_omega_from_disclosure <- function(disclosure,
+                                             density_floor = 1e-8) {
+  G <- length(disclosure)
+  n_vec <- vapply(disclosure, function(d) d$n, numeric(1))
+  N <- sum(n_vec)
+
+  Omega <- matrix(0, nrow = 2 * G, ncol = 2 * G)
+
+  for (g in seq_len(G)) {
+    d <- disclosure[[g]]
+
+    if (d$type == "quantile") {
+      Omega_g <- qlm_region_omega_one_quantile_group(
+        qhat = d$qhat,
+        tau = d$tau,
+        n_g = d$n,
+        N = N,
+        y_lower = d$y_lower,
+        y_upper = d$y_upper,
+        density_floor = density_floor
+      )
+    }
+
+    if (d$type %in% c("mean", "mean_quantile")) {
+      var_mean_g <- qlm_region_mean_variance_from_disclosure(d)
+      Omega_g <- N * var_mean_g * matrix(1, nrow = 2, ncol = 2)
+    }
+
+    idx <- c(2 * g - 1, 2 * g)
+    Omega[idx, idx] <- Omega_g
+  }
+
+  Omega
+}
+
+
+qlm_region_omega_one_quantile_group <- function(qhat,
+                                                tau,
+                                                n_g,
+                                                N,
+                                                y_lower,
+                                                y_upper,
+                                                density_floor = 1e-8) {
+  tau_full <- c(0, tau, 1)
+  delta_tau <- diff(tau_full)
+
+  aL <- delta_tau[-1]
+  aU <- delta_tau[-length(delta_tau)]
+
+  fhat <- qlm_density_at_quantiles_with_support(
+    qhat = qhat,
+    tau = tau,
+    y_lower = y_lower,
+    y_upper = y_upper,
+    density_floor = density_floor
+  )
+
+  cov_tau <- outer(tau, tau, function(a, b) pmin(a, b) - a * b)
+  denom <- outer(fhat, fhat, "*")
+  Sigma_g <- cov_tau / denom
+
+  (N / n_g) *
+    matrix(
+      c(
+        as.numeric(t(aL) %*% Sigma_g %*% aL),
+        as.numeric(t(aL) %*% Sigma_g %*% aU),
+        as.numeric(t(aU) %*% Sigma_g %*% aL),
+        as.numeric(t(aU) %*% Sigma_g %*% aU)
+      ),
+      nrow = 2,
+      byrow = TRUE
+    )
+}
+
+
+qlm_density_at_quantiles_with_support <- function(qhat,
+                                                  tau,
+                                                  y_lower,
+                                                  y_upper,
+                                                  density_floor = 1e-8) {
+  qhat <- as.numeric(qhat)
+  tau <- as.numeric(tau)
+
+  q_full <- c(y_lower, qhat, y_upper)
+  tau_full <- c(0, tau, 1)
+
+  K <- length(tau)
+  fhat <- numeric(K)
+
+  for (k in seq_len(K)) {
+    idx <- k + 1
+
+    slope <- (q_full[idx + 1] - q_full[idx - 1]) /
+      (tau_full[idx + 1] - tau_full[idx - 1])
+
+    fhat[k] <- 1 / max(slope, density_floor)
+  }
+
+  pmax(fhat, density_floor)
+}
+
+
+qlm_region_mean_variance_from_disclosure <- function(d) {
+  if (!is.null(d$var)) {
+    return(as.numeric(d$var))
+  }
+
+  if (!is.null(d$se)) {
+    return(as.numeric(d$se)^2)
+  }
+
+  if (!is.null(d$sd) && !is.null(d$n)) {
+    return(as.numeric(d$sd)^2 / as.numeric(d$n))
+  }
+
+  stop("Mean disclosure requires se, var, or sd.")
+}
+
+
+qlm_region_warn_disclosure_structure <- function(disclosure) {
+  types <- vapply(disclosure, function(d) d$type, character(1))
+
+  if (length(unique(types)) > 1) {
+    message("Mixed disclosure detected: ", paste(unique(types), collapse = ", "), ".")
+  }
+
+  tau_lengths <- vapply(disclosure, function(d) {
+    if (d$type %in% c("quantile", "mean_quantile")) {
+      length(d$tau)
+    } else {
+      NA_integer_
+    }
+  }, integer(1))
+
+  tau_lengths_nonmissing <- tau_lengths[!is.na(tau_lengths)]
+
+  if (length(tau_lengths_nonmissing) > 1 &&
+      length(unique(tau_lengths_nonmissing)) > 1) {
+    warning(
+      "Groups have different numbers of disclosed quantiles. ",
+      "This is allowed, but precision may differ substantially across groups."
+    )
+  }
+
+  for (g in seq_along(disclosure)) {
+    d <- disclosure[[g]]
+
+    if (d$type %in% c("quantile", "mean_quantile")) {
+      max_gap <- max(diff(c(0, d$tau, 1)))
+
+      if (max_gap > 0.5) {
+        warning(
+          "Group ", g, " has a coarse quantile grid with maximum tau gap ",
+          round(max_gap, 3), ". The confidence region may be wide."
+        )
+      }
+
+      if (length(d$tau) == 1) {
+        warning(
+          "Group ", g, " has only one disclosed quantile. ",
+          "The covariance matrix is estimated using known support endpoints."
+        )
+      }
+    }
+  }
+}
+
+
+qlm_region_recycle_vector <- function(x, G, name) {
+  if (is.null(x)) {
+    stop(name, " must be supplied.")
+  }
+
+  if (length(x) == 1) {
+    x <- rep(x, G)
+  }
+
+  x <- as.numeric(x)
+
+  if (length(x) != G) {
+    stop(name, " must be a scalar or a vector of length G.")
+  }
+
+  if (any(!is.finite(x))) {
+    stop(name, " contains non-finite values.")
+  }
+
+  x
+}
+
+
+qlm_region_find_first_existing_name <- function(x, candidates) {
+  hit <- candidates[candidates %in% x]
+
+  if (length(hit) == 0) {
+    return(NULL)
+  }
+
+  hit[1]
+}
+
+
+
+
+
+#' Simultaneous confidence region for treatment-control contrasts
+#'
+#' Construct a simultaneous confidence region for regression coefficients
+#' when the outcome is a treatment-control mean contrast. This function is
+#' intended for two-arm studies, meta-analysis applications, and related
+#' settings where treatment and control summaries are disclosed separately.
+#'
+#' For each matched group `g`, the contrast is
+#' \deqn{
+#'   \theta_g = m_{g,T} - m_{g,C}.
+#' }
+#' The function constructs bounds for each \eqn{\theta_g}, estimates their
+#' covariance matrix, and then forms a simultaneous confidence region for
+#' coefficients satisfying
+#' \deqn{
+#'   X_g'\beta \in [\underline\theta_g, \overline\theta_g].
+#' }
+#'
+#' @param disclosure A data.frame containing arm-level disclosure data.
+#'   The data.frame must be in long format and contain:
+#'   \describe{
+#'     \item{group identifier column}{A column identifying matched studies,
+#'       pairs, experiments, or other units. The column name is detected
+#'       automatically from one of `group`, `group_id`, `study`,
+#'       `study_id`, or `id`.}
+#'     \item{arm}{A column named `arm` identifying treatment and control
+#'       arms.}
+#'     \item{type}{A column indicating whether each row reports a quantile
+#'       or a mean. Supported values are `quantile`, `q`, `quantiles`,
+#'       `mean`, and `m`.}
+#'     \item{n}{A column giving the arm-level sample size.}
+#'   }
+#'
+#'   Quantile rows require a `tau` column and one disclosed-value column.
+#'   The disclosed-value column may be named `value`, `qhat`, or `estimate`.
+#'
+#'   Mean rows require either a `mean` column or one disclosed-value column
+#'   named `value`, `qhat`, or `estimate`. For inference with mean
+#'   disclosures, at least one of `var`, `se`, or `sd` must also be supplied.
+#'   Here `var` refers to the variance of the reported mean estimator, not
+#'   the variance of the underlying observations.
+#'
+#'   For quantile disclosures, support bounds must be supplied either
+#'   through columns `y_lower` and `y_upper` in `disclosure` or through
+#'   the function arguments `y_lower` and `y_upper`.
+#' @param X A G by p matrix of group-level covariates. Rows must correspond
+#'   to the matched groups after alignment by the detected group identifier.
+#' @param treatment Value of the `arm` column identifying treatment groups.
+#'   For example, if `arm` takes values `"case"` and `"control"`, set
+#'   `treatment = "case"`.
+#' @param control Value of the `arm` column identifying control groups.
+#'   For example, if `arm` takes values `"case"` and `"control"`, set
+#'   `control = "control"`.
+#' @param y_lower A scalar or numeric vector giving lower support endpoints.
+#'   For quantile disclosures, support bounds must be supplied either
+#'   through this argument and `y_upper`, or through columns `y_lower` and
+#'   `y_upper` in `disclosure`.
+#' @param y_upper A scalar or numeric vector giving upper support endpoints.
+#'   For quantile disclosures, support bounds must be supplied either
+#'   through `y_lower` and this argument, or through columns `y_lower` and
+#'   `y_upper` in `disclosure`.
+#' @param level Confidence level. Default is 0.95.
+#' @param B Number of Gaussian simulation draws used to compute the
+#'   simultaneous critical value.
+#' @param density_floor A positive lower bound used to avoid numerical
+#'   instability in density estimation.
+#'
+#' @return
+#' An object of class `"qlm_contrast_region"` and `"qlm_region"` containing:
+#' \describe{
+#'   \item{bounds}{Estimated contrast bounds.}
+#'   \item{Omega}{Estimated covariance matrix of the estimated contrast bounds.}
+#'   \item{critical_value}{Simulated simultaneous critical value.}
+#'   \item{level}{Confidence level.}
+#'   \item{lower_adjusted}{Adjusted lower constraints.}
+#'   \item{upper_adjusted}{Adjusted upper constraints.}
+#'   \item{const_mat}{Constraint matrix defining the simultaneous confidence region.}
+#'   \item{const_dir}{Constraint directions.}
+#'   \item{const_rhs}{Right-hand side vector of the constraints.}
+#'   \item{id}{Matched group identifiers.}
+#'   \item{group_col}{Detected group identifier column.}
+#'   \item{treatment}{Treatment arm value.}
+#'   \item{control}{Control arm value.}
+#'   \item{X}{Group-level covariate matrix.}
+#'   \item{n_g}{Total sample size within each matched treatment-control pair.}
+#'   \item{call}{Matched function call.}
+#' }
+#'
+#' @examples
+#' disclosure <- data.frame(
+#'   study = c(
+#'     1, 1, 1,
+#'     1, 1, 1,
+#'     2,
+#'     2
+#'   ),
+#'   arm = c(
+#'     "case", "case", "case",
+#'     "control", "control", "control",
+#'     "case",
+#'     "control"
+#'   ),
+#'   type = c(
+#'     "quantile", "quantile", "quantile",
+#'     "quantile", "quantile", "quantile",
+#'     "mean",
+#'     "mean"
+#'   ),
+#'   tau = c(
+#'     0.25, 0.50, 0.75,
+#'     0.25, 0.50, 0.75,
+#'     NA,
+#'     NA
+#'   ),
+#'   value = c(
+#'     10, 15, 20,
+#'     8, 12, 16,
+#'     25,
+#'     20
+#'   ),
+#'   n = c(
+#'     100, 100, 100,
+#'     100, 100, 100,
+#'     120,
+#'     120
+#'   ),
+#'   se = c(
+#'     NA, NA, NA,
+#'     NA, NA, NA,
+#'     1.5,
+#'     1.2
+#'   )
+#' )
+#'
+#' X <- matrix(1, nrow = 2, ncol = 1)
+#' colnames(X) <- "intercept"
+#'
+#' region <- qlm_contrast_region(
+#'   disclosure = disclosure,
+#'   X = X,
+#'   treatment = "case",
+#'   control = "control",
+#'   y_lower = 0,
+#'   y_upper = 100,
+#'   B = 100
+#' )
+#'
+#' confint(region)
+#'
+#' @export
+qlm_contrast_region <- function(disclosure,
+                                X,
+                                treatment,
+                                control,
+                                y_lower = NULL,
+                                y_upper = NULL,
+                                level = 0.95,
+                                B = 10000,
+                                density_floor = 1e-8) {
+
+  if (!is.data.frame(disclosure)) {
+    stop("disclosure must be a data.frame.")
+  }
+  if (nrow(disclosure) == 0) {
+    stop("disclosure must have at least one row.")
+  }
+
+  X <- as.matrix(X)
+
+  if (!is.numeric(X)) {
+    stop("X must be numeric.")
+  }
+  if (any(!is.finite(X))) {
+    stop("X contains non-finite values.")
+  }
+  if (!is.numeric(level) || length(level) != 1 ||
+      !is.finite(level) || level <= 0 || level >= 1) {
+    stop("level must be a scalar in (0, 1).")
+  }
+  if (!is.numeric(B) || length(B) != 1 ||
+      !is.finite(B) || B <= 0) {
+    stop("B must be a positive scalar.")
+  }
+  if (!is.numeric(density_floor) || length(density_floor) != 1 ||
+      !is.finite(density_floor) || density_floor <= 0) {
+    stop("density_floor must be a positive finite scalar.")
+  }
+
+  B <- as.integer(B)
+
+  group_col <- qlm_region_find_first_existing_name(
+    names(disclosure),
+    c("group", "group_id", "study", "study_id", "id")
+  )
+
+  if (is.null(group_col)) {
+    stop(
+      "disclosure must contain a group identifier column. ",
+      "Accepted names are: group, group_id, study, study_id, or id."
+    )
+  }
+
+  if (!"arm" %in% names(disclosure)) {
+    stop("disclosure must contain an arm column.")
+  }
+
+  if (missing(treatment)) {
+    stop("treatment must be supplied.")
+  }
+  if (missing(control)) {
+    stop("control must be supplied.")
+  }
+  if (identical(treatment, control)) {
+    stop("treatment and control must be different arm values.")
+  }
+
+  treat_df <- disclosure[disclosure$arm == treatment, , drop = FALSE]
+  control_df <- disclosure[disclosure$arm == control, , drop = FALSE]
+
+  if (nrow(treat_df) == 0) {
+    stop("No treatment-arm rows found.")
+  }
+  if (nrow(control_df) == 0) {
+    stop("No control-arm rows found.")
+  }
+
+  treat_ids <- unique(as.character(treat_df[[group_col]]))
+  control_ids <- unique(as.character(control_df[[group_col]]))
+
+  missing_control <- setdiff(treat_ids, control_ids)
+  missing_treat <- setdiff(control_ids, treat_ids)
+
+  if (length(missing_control) > 0) {
+    stop(
+      "Some treatment ids have no matching control ids: ",
+      paste(missing_control, collapse = ", ")
+    )
+  }
+
+  if (length(missing_treat) > 0) {
+    stop(
+      "Some control ids have no matching treatment ids: ",
+      paste(missing_treat, collapse = ", ")
+    )
+  }
+
+  matched_ids <- sort(unique(treat_ids))
+
+  treat_df <- treat_df[
+    order(match(as.character(treat_df[[group_col]]), matched_ids),
+          seq_len(nrow(treat_df))),
+    ,
+    drop = FALSE
+  ]
+
+  control_df <- control_df[
+    order(match(as.character(control_df[[group_col]]), matched_ids),
+          seq_len(nrow(control_df))),
+    ,
+    drop = FALSE
+  ]
+
+  treat_disclosure <- qlm_region_disclosure_from_data_frame(treat_df)
+  control_disclosure <- qlm_region_disclosure_from_data_frame(control_df)
+
+  treat_disclosure <- qlm_region_attach_support(
+    disclosure = treat_disclosure,
+    y_lower = y_lower,
+    y_upper = y_upper
+  )
+
+  control_disclosure <- qlm_region_attach_support(
+    disclosure = control_disclosure,
+    y_lower = y_lower,
+    y_upper = y_upper
+  )
+
+  for (g in seq_along(treat_disclosure)) {
+    treat_disclosure[[g]] <- validate_qlm_region_disclosure_one(
+      treat_disclosure[[g]],
+      group = g
+    )
+  }
+
+  for (g in seq_along(control_disclosure)) {
+    control_disclosure[[g]] <- validate_qlm_region_disclosure_one(
+      control_disclosure[[g]],
+      group = g
+    )
+  }
+
+  G <- length(treat_disclosure)
+
+  if (length(control_disclosure) != G) {
+    stop("Treatment and control disclosures must have the same number of groups.")
+  }
+
+  if (nrow(X) != G) {
+    stop("nrow(X) must equal the number of matched treatment-control groups.")
+  }
+
+  n_treat <- vapply(treat_disclosure, function(d) d$n, numeric(1))
+  n_control <- vapply(control_disclosure, function(d) d$n, numeric(1))
+  n_pair <- n_treat + n_control
+  N <- sum(n_pair)
+
+  bounds_treat <- qlm_region_bounds_from_disclosure(treat_disclosure)
+  bounds_control <- qlm_region_bounds_from_disclosure(control_disclosure)
+
+  Omega_treat <- qlm_region_omega_from_disclosure(
+    disclosure = treat_disclosure,
+    density_floor = density_floor
+  )
+
+  Omega_control <- qlm_region_omega_from_disclosure(
+    disclosure = control_disclosure,
+    density_floor = density_floor
+  )
+
+  N_treat <- sum(n_treat)
+  N_control <- sum(n_control)
+
+  Omega_treat <- Omega_treat * (N / N_treat)
+  Omega_control <- Omega_control * (N / N_control)
+
+  theta_lower <- bounds_treat$m_lower - bounds_control$m_upper
+  theta_upper <- bounds_treat$m_upper - bounds_control$m_lower
+
+  if (any(theta_lower > theta_upper)) {
+    stop("Some lower contrast bounds exceed upper contrast bounds.")
+  }
+
+  Omega <- matrix(0, nrow = 2 * G, ncol = 2 * G)
+
+  for (g in seq_len(G)) {
+    idx <- c(2 * g - 1, 2 * g)
+
+    Omega_T_g <- Omega_treat[idx, idx, drop = FALSE]
+    Omega_C_g <- Omega_control[idx, idx, drop = FALSE]
+
+    Omega_g <- matrix(NA_real_, nrow = 2, ncol = 2)
+
+    ## theta_lower = treatment_lower - control_upper
+    ## theta_upper = treatment_upper - control_lower
+    Omega_g[1, 1] <- Omega_T_g[1, 1] + Omega_C_g[2, 2]
+    Omega_g[2, 2] <- Omega_T_g[2, 2] + Omega_C_g[1, 1]
+    Omega_g[1, 2] <- Omega_T_g[1, 2] + Omega_C_g[2, 1]
+    Omega_g[2, 1] <- Omega_g[1, 2]
+
+    Omega[idx, idx] <- Omega_g
+  }
+
+  omega <- sqrt(diag(Omega))
+
+  if (any(!is.finite(omega))) {
+    stop("Estimated asymptotic standard deviations contain non-finite values.")
+  }
+  if (any(omega <= 0)) {
+    stop(
+      "Estimated asymptotic variances must be strictly positive. ",
+      "This may occur when disclosed quantiles are nearly identical or ",
+      "when mean disclosures have zero or missing variance."
+    )
+  }
+
+  Z <- MASS::mvrnorm(
+    n = B,
+    mu = rep(0, 2 * G),
+    Sigma = Omega
+  )
+
+  Tsim <- apply(abs(sweep(Z, 2, omega, "/")), 1, max)
+  qhat_crit <- as.numeric(stats::quantile(Tsim, probs = level, type = 8))
+
+  adj <- qhat_crit * omega / sqrt(N)
+
+  lower_adj <- theta_lower - adj[seq(1, 2 * G, by = 2)]
+  upper_adj <- theta_upper + adj[seq(2, 2 * G, by = 2)]
+
+  const_mat <- rbind(X, X)
+  const_dir <- c(rep(">=", G), rep("<=", G))
+  const_rhs <- c(lower_adj, upper_adj)
+
+  if (!is.null(colnames(X))) {
+    colnames(const_mat) <- colnames(X)
+  }
+
+  bounds <- list(
+    theta_lower = theta_lower,
+    theta_upper = theta_upper
+  )
+  class(bounds) <- "qlm_contrast_bounds"
+
+  out <- list(
+    bounds = bounds,
+    Omega = Omega,
+    critical_value = qhat_crit,
+    level = level,
+    lower_adjusted = lower_adj,
+    upper_adjusted = upper_adj,
+    const_mat = const_mat,
+    const_dir = const_dir,
+    const_rhs = const_rhs,
+    id = matched_ids,
+    group_col = group_col,
+    treatment = treatment,
+    control = control,
+    treatment_disclosure = treat_disclosure,
+    control_disclosure = control_disclosure,
+    X = X,
+    n_g = n_pair,
+    call = match.call()
+  )
+
+  class(out) <- c("qlm_contrast_region", "qlm_region")
+  out
+}
+
+
+#' @export
+print.qlm_contrast_region <- function(x, ...) {
+  cat("Treatment-control contrast simultaneous confidence region\n\n")
+  cat("Confidence level:", x$level, "\n")
+  cat("Critical value:", x$critical_value, "\n\n")
+  cat("Linear constraints are stored in:\n")
+  cat("  const_mat, const_dir, and const_rhs\n\n")
+  cat("Number of constraints:", nrow(x$const_mat), "\n")
+  cat("Number of coefficients:", ncol(x$const_mat), "\n")
   invisible(x)
 }

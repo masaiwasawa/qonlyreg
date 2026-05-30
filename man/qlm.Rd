@@ -2,39 +2,166 @@
 % Please edit documentation in R/qlm.R
 \name{qlm}
 \alias{qlm}
-\title{Quantile-only linear model}
+\title{Quantile/mean disclosure linear model}
 \usage{
-qlm(qhat, tau, X, n_g, density_floor = 1e-08)
+qlm(
+  qhat = NULL,
+  tau = NULL,
+  X,
+  n_g = NULL,
+  disclosure = NULL,
+  density_floor = 1e-08
+)
 }
 \arguments{
-\item{qhat}{A G by K matrix of disclosed sample quantiles.
-Each row corresponds to a group and each column corresponds
-to a quantile level in \code{tau}. Quantiles must be ordered
-increasingly within each row.}
+\item{qhat}{A G by K matrix of disclosed sample quantiles. Each row
+corresponds to a group and each column corresponds to a quantile level
+in \code{tau}. This is the legacy common-grid quantile-only interface.
+Ignored if \code{disclosure} is supplied.}
 
-\item{tau}{A numeric vector of length K containing quantile
-levels in (0, 1), sorted in increasing order.}
+\item{tau}{A numeric vector of length K containing quantile levels in
+(0, 1), sorted in increasing order. This is the legacy common-grid
+quantile-only interface. Ignored if \code{disclosure} is supplied.}
 
-\item{X}{A G by p matrix of group-level covariates.}
+\item{X}{A G by p matrix of group-level covariates. The rows of \code{X} must
+correspond to the groups represented by \code{qhat} or \code{disclosure}, in the
+same order.}
 
-\item{n_g}{A numeric vector of length G containing
-group sizes.}
+\item{n_g}{A numeric vector of length G containing group sizes. This is
+the legacy common-grid quantile-only interface. Ignored if \code{disclosure}
+is supplied.}
 
-\item{density_floor}{A positive lower bound used to avoid
-numerical instability in density estimation.}
+\item{disclosure}{Optional group-level disclosure object. This may be
+either a list or a data.frame. If supplied, this takes precedence over
+\code{qhat}, \code{tau}, and \code{n_g}.
+
+A data.frame input should be in long format. It must contain a group
+identifier column, a \code{type} column, and an \code{n} column. The group
+identifier column is detected from one of \code{group}, \code{group_id}, \code{study},
+\code{study_id}, or \code{id}. The \code{type} column indicates whether each row
+reports a quantile or a mean. Supported values are \code{quantile}, \code{q},
+\code{quantiles}, \code{mean}, and \code{m}.
+
+Quantile rows require a \code{tau} column and one disclosed-value column.
+The disclosed-value column may be named \code{value}, \code{qhat}, or \code{estimate}.
+
+Mean rows require either a \code{mean} column or one disclosed-value column
+named \code{value}, \code{qhat}, or \code{estimate}.
+For inference, at least one of \code{var}, \code{se}, or \code{sd} may additionally
+be supplied. If none of these quantities is provided for a mean
+disclosure, the coefficient covariance matrix and standard errors
+cannot be computed.
+Here \code{var} refers to the
+variance of the reported mean estimator, not the variance
+of the underlying observations.
+
+A list input should contain one element per group. Each element should
+be a list with \code{type = "quantile"}, \code{type = "mean"}, or
+\code{type = "mean_quantile"}. Quantile disclosures require \code{tau}, \code{qhat},
+and \code{n}. Mean disclosures require \code{mean} and \code{n}. For mean
+disclosures, at least one of \code{var}, \code{se}, or \code{sd} may additionally
+be supplied.}
+
+\item{density_floor}{A positive lower bound used to avoid numerical
+instability in density estimation.}
 }
 \value{
 An object of class \code{"qlm"} containing:
 \describe{
+\item{call}{The matched function call.}
 \item{coefficients}{Estimated regression coefficients.}
-\item{vcov}{Estimated covariance matrix of the estimator.}
-\item{se}{Estimated standard errors.}
+\item{vcov}{Estimated covariance matrix of the estimator. If a mean
+disclosure is supplied without \code{var}, \code{se}, or \code{sd}, this matrix
+is filled with \code{NA}.}
+\item{se}{Estimated standard errors. If the covariance matrix cannot be
+computed, these are \code{NA}.}
 \item{m_hat}{Estimated group conditional means.}
 \item{var_m_hat}{Estimated variances of the group mean estimators.}
-\item{weights}{Integration weights used for quantile aggregation.}
-\item{fhat}{Estimated densities at disclosed quantiles.}
+\item{disclosure}{Standardized group-level disclosure objects.}
+\item{X}{Group-level covariate matrix.}
+\item{n_g}{Group sizes.}
+\item{weights}{A list of integration weights used for quantile aggregation.}
+\item{fhat}{A list of estimated densities at disclosed quantiles.}
 }
 }
 \description{
-Estimate a linear regression model using group-level disclosed quantiles.
+Estimate a linear regression model using group-level disclosed quantiles,
+observed means, or mixed disclosure.
+}
+\details{
+The function first constructs an estimated group conditional mean for each
+group. For quantile disclosures, the group mean is approximated by numerical
+integration of the disclosed quantile function. For mean disclosures, the
+reported mean is used directly. The regression coefficient is then estimated
+by weighted least squares using group sizes as weights.
+}
+\examples{
+## Legacy common-grid quantile-only interface
+qhat <- rbind(
+  c(10, 15, 20),
+  c(20, 25, 30),
+  c(30, 35, 40)
+)
+
+tau <- c(0.25, 0.50, 0.75)
+
+X <- cbind(
+  intercept = 1,
+  x = c(0, 1, 2)
+)
+
+n_g <- c(100, 120, 150)
+
+fit <- qlm(
+  qhat = qhat,
+  tau = tau,
+  X = X,
+  n_g = n_g
+)
+
+fit
+summary(fit)
+
+## Disclosure data.frame interface with mixed disclosure
+disclosure <- data.frame(
+  group = c(
+    1, 1, 1,
+    2,
+    3, 3, 3
+  ),
+  type = c(
+    "quantile", "quantile", "quantile",
+    "mean",
+    "quantile", "quantile", "quantile"
+  ),
+  tau = c(
+    0.25, 0.50, 0.75,
+    NA,
+    0.25, 0.50, 0.75
+  ),
+  value = c(
+    10, 15, 20,
+    25,
+    30, 35, 40
+  ),
+  n = c(
+    100, 100, 100,
+    120,
+    150, 150, 150
+  ),
+  se = c(
+    NA, NA, NA,
+    1.5,
+    NA, NA, NA
+  )
+)
+
+fit_mixed <- qlm(
+  disclosure = disclosure,
+  X = X
+)
+
+fit_mixed
+summary(fit_mixed)
+
 }

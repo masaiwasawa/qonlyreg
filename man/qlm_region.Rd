@@ -2,46 +2,86 @@
 % Please edit documentation in R/qlm_region.R
 \name{qlm_region}
 \alias{qlm_region}
-\title{Simultaneous confidence region from quantile-only partial identification}
+\title{Simultaneous confidence region from quantile/mean disclosure}
 \usage{
 qlm_region(
-  qhat,
-  tau,
+  qhat = NULL,
+  tau = NULL,
   X,
-  n_g,
-  y_lower,
-  y_upper,
+  n_g = NULL,
+  y_lower = NULL,
+  y_upper = NULL,
+  disclosure = NULL,
   level = 0.95,
   B = 10000,
   density_floor = 1e-08
 )
 }
 \arguments{
-\item{qhat}{A G by K matrix of disclosed sample quantiles.
-Each row corresponds to a group and each column corresponds
-to a quantile level in \code{tau}. Quantiles must be ordered
-increasingly within each row.}
+\item{qhat}{A G by K matrix of disclosed sample quantiles. Each row
+corresponds to a group and each column corresponds to a quantile level
+in \code{tau}. This is the legacy common-grid quantile-only interface.
+Ignored if \code{disclosure} is supplied.}
 
-\item{tau}{A numeric vector of length K containing quantile
-levels in (0, 1), sorted in increasing order.}
+\item{tau}{A numeric vector of length K containing quantile levels in
+(0, 1), sorted in increasing order. This is the legacy common-grid
+quantile-only interface. Ignored if \code{disclosure} is supplied.}
 
-\item{X}{A G by p matrix of group-level covariates.}
+\item{X}{A G by p matrix of group-level covariates. Rows must correspond
+to the groups represented by \code{qhat} or \code{disclosure}, in the same order.}
 
-\item{n_g}{A numeric vector of length G containing group sizes.}
+\item{n_g}{A numeric vector of length G containing group sizes. This is
+the legacy common-grid quantile-only interface. Ignored if \code{disclosure}
+is supplied.}
 
 \item{y_lower}{A numeric vector of length G, or a scalar, giving known
-lower support endpoints for each group.}
+lower support endpoints for each group. For quantile disclosures,
+support bounds must be supplied either through this argument and
+\code{y_upper}, or through columns \code{y_lower} and \code{y_upper} in \code{disclosure}.}
 
 \item{y_upper}{A numeric vector of length G, or a scalar, giving known
-upper support endpoints for each group.}
+upper support endpoints for each group. For quantile disclosures,
+support bounds must be supplied either through \code{y_lower} and this
+argument, or through columns \code{y_lower} and \code{y_upper} in \code{disclosure}.}
+
+\item{disclosure}{Optional group-level disclosure object. This may be
+either a list or a data.frame. If supplied, this takes precedence over
+\code{qhat}, \code{tau}, \code{n_g}, \code{y_lower}, and \code{y_upper} where applicable.
+
+A data.frame input should be in long format. It must contain a group
+identifier column, a \code{type} column, and an \code{n} column. The group
+identifier column is detected from one of \code{group}, \code{group_id}, \code{study},
+\code{study_id}, or \code{id}. The \code{type} column indicates whether each row
+reports a quantile or a mean. Supported values are \code{quantile}, \code{q},
+\code{quantiles}, \code{mean}, and \code{m}.
+
+Quantile rows require a \code{tau} column and one disclosed-value column.
+The disclosed-value column may be named \code{value}, \code{qhat}, or \code{estimate}.
+
+Mean rows require either a \code{mean} column or one disclosed-value column
+named \code{value}, \code{qhat}, or \code{estimate}. For inference with mean
+disclosures, at least one of \code{var}, \code{se}, or \code{sd} must also be supplied.
+Here \code{var} refers to the variance of the reported mean estimator, not
+the variance of the underlying observations.
+
+For quantile disclosures, support bounds must be supplied either
+through columns \code{y_lower} and \code{y_upper} in \code{disclosure} or through
+the function arguments \code{y_lower} and \code{y_upper}.
+
+A list input should contain one element per group. Each element should
+be a list with \code{type = "quantile"}, \code{type = "mean"}, or
+\code{type = "mean_quantile"}. Quantile disclosures require \code{tau}, \code{qhat},
+\code{n}, \code{y_lower}, and \code{y_upper}, unless support bounds are supplied
+through the function arguments. Mean disclosures require \code{mean} and
+\code{n}, and at least one of \code{var}, \code{se}, or \code{sd}.}
 
 \item{level}{Confidence level. Default is 0.95.}
 
 \item{B}{Number of Gaussian simulation draws used to compute the
 simultaneous critical value.}
 
-\item{density_floor}{A positive lower bound used to avoid
-numerical instability in density estimation.}
+\item{density_floor}{A positive lower bound used to avoid numerical
+instability in density estimation.}
 }
 \value{
 An object of class \code{"qlm_region"} containing:
@@ -52,45 +92,107 @@ An object of class \code{"qlm_region"} containing:
 \item{level}{Confidence level.}
 \item{lower_adjusted}{Adjusted lower constraints.}
 \item{upper_adjusted}{Adjusted upper constraints.}
-\item{const_mat}{Constraint matrix defining the simultaneous confidence region.}
+\item{const_mat}{Constraint matrix defining the simultaneous confidence
+region.}
 \item{const_dir}{Constraint directions.}
 \item{const_rhs}{Right-hand side vector of the constraints.}
+\item{disclosure}{Standardized group-level disclosure objects.}
+\item{X}{Group-level covariate matrix.}
+\item{n_g}{Group sizes.}
 \item{call}{Matched function call.}
+}
+
+#' @examples
+\subsection{Legacy common-grid quantile-only interface}{
+
+qhat <- rbind(
+c(10, 15, 20),
+c(20, 25, 30),
+c(30, 35, 40)
+)
+
+tau <- c(0.25, 0.50, 0.75)
+
+X <- cbind(
+intercept = 1,
+x = c(0, 1, 2)
+)
+
+n_g <- c(100, 120, 150)
+
+region <- qlm_region(
+qhat = qhat,
+tau = tau,
+X = X,
+n_g = n_g,
+y_lower = 0,
+y_upper = 100,
+B = 100
+)
+
+region
+confint(region)
+
+#' ## Disclosure data.frame interface with mixed disclosure
+disclosure <- data.frame(
+group = c(
+1, 1, 1,
+2,
+3, 3, 3
+),
+type = c(
+"quantile", "quantile", "quantile",
+"mean",
+"quantile", "quantile", "quantile"
+),
+tau = c(
+0.25, 0.50, 0.75,
+NA,
+0.25, 0.50, 0.75
+),
+value = c(
+10, 15, 20,
+25,
+30, 35, 40
+),
+n = c(
+100, 100, 100,
+120,
+150, 150, 150
+),
+se = c(
+NA, NA, NA,
+1.5,
+NA, NA, NA
+)
+)
+
+X <- cbind(
+intercept = 1,
+x = c(0, 1, 2)
+)
+
+region <- qlm_region(
+disclosure = disclosure,
+X = X,
+y_lower = 0,
+y_upper = 100,
+B = 100
+)
+
+region
+confint(region)
 }
 }
 \description{
 Construct a simultaneous confidence region for regression coefficients
-using disclosed group-level quantiles.
+using disclosed group-level quantiles, observed means, or mixed disclosure.
 }
-\examples{
-set.seed(123)
-
-N <- 200
-G <- 5
-tau <- c(0.25, 0.5, 0.75)
-
-X_grid <- seq(-1, 1, length.out = G)
-g <- rep(1:G, length.out = N)
-Xg <- X_grid[g]
-Y <- 1 + 2 * Xg + rnorm(N)
-
-qhat_mat <- t(sapply(seq_len(G), function(j) {
-  stats::quantile(Y[g == j], probs = tau, type = 1)
-}))
-
-X <- stats::model.matrix(~ X_grid)
-n_g <- as.numeric(table(g))
-
-region <- qlm_region(
-  qhat = qhat_mat,
-  tau = tau,
-  X = X,
-  n_g = n_g,
-  y_lower = -10,
-  y_upper = 10,
-  B = 100
-)
-
-confint(region)
-
+\details{
+The function constructs estimated lower and upper bounds for each group
+conditional mean, estimates the covariance matrix of these bounds, and
+then forms a simultaneous confidence region for coefficients satisfying
+\deqn{
+  X_g'\beta \in [\underline m_g, \overline m_g].
+}
 }

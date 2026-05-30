@@ -9,30 +9,33 @@
 
 ## Overview
 
-`qonlyreg` provides methods for regression analysis when only quantile
-summaries of the outcome distribution are available.
+`qonlyreg` provides methods for regression analysis when only grouped
+summary statistics of the outcome distribution are available.
 
-The package implements estimation and inference procedures for
-regression models based on disclosed quantiles rather than
-individual-level observations or conditional means.
+The package implements estimation, partial identification, and inference
+procedures for linear regression models when researchers observe
+disclosed quantiles, reported means, or mixed disclosure rather than
+individual-level outcomes.
 
 The methodology is particularly useful in settings where:
 
 - only grouped quantile summaries are publicly available,
 - privacy restrictions prevent disclosure of microdata,
-- published statistics report quantiles instead of means,
+- published statistics report medians, percentiles, ranges, or means,
+- treatment and control arms are reported only through summary
+  statistics,
 - the outcome distribution is only partially observed.
 
 The package currently supports:
 
 - quantile-only linear regression,
+- mixed disclosure with quantiles and observed means,
+- group-specific quantile grids,
 - construction of sharp bounds for conditional means,
-- asymptotic inference under increasing quantile disclosure.
 - partial identification under coarse quantile disclosure,
 - simultaneous confidence regions,
-
-The theoretical framework is based on quantile-function restrictions and
-asymptotic results for quantile-only regression.
+- treatment-control contrast bounds and confidence regions for two-arm
+  studies and meta-analysis applications.
 
 ## Installation
 
@@ -47,61 +50,62 @@ remotes::install_github("masaiwasawa/qonlyreg")
 
 The following example illustrates the basic workflow of the package:
 
+### Basic example
+
 ``` r
 library(qonlyreg)
 
 tau <- c(0.25, 0.5, 0.75)
 
-qhat <- matrix(
-  c(
-    1.0, 2.0, 3.0,
-    2.0, 3.0, 5.0
-  ),
-  nrow = 2,
-  byrow = TRUE
+qhat <- rbind(
+  c(10, 15, 20),
+  c(20, 25, 30),
+  c(30, 35, 40)
 )
 
-X <- cbind(1, c(0, 1))
-
-n_g <- c(100, 100)
-
-
-## Sharp bounds for conditional means
-bounds <- qlm_bounds(
-  qhat = qhat,
-  tau = tau,
-  y_lower = 0,
-  y_upper = 10
+X <- cbind(
+  intercept = 1,
+  x = c(0, 1, 2)
 )
 
-bounds
-#> Quantile-only mean bounds
-#> 
-#>   m_lower m_upper
-#> 1     1.5       4
-#> 2     2.5       5
+n_g <- c(100, 120, 150)
 
-
-## Quantile-only regression
+## Point estimation
 fit <- qlm(
   qhat = qhat,
   tau = tau,
   X = X,
   n_g = n_g
 )
+
 summary(fit)
-#> Quantile-only linear model
+#> Quantile/mean disclosure linear model
 #> 
 #> Call:
 #> qlm(qhat = qhat, tau = tau, X = X, n_g = n_g)
 #> 
 #> Coefficients:
-#>      Estimate Std.Error z.value   p.value    
-#> [1,]  2.00000   0.14577 13.7199 < 2.2e-16 ***
-#> [2,]  1.37500   0.26546  5.1797 2.222e-07 ***
+#>                    Std.Error                     
+#> intercept 15.00000   0.65192 23.009 < 2.2e-16 ***
+#> x         10.00000   0.46734 21.398 < 2.2e-16 ***
 #> ---
 #> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
+## Mean bounds
+bounds <- qlm_bounds(
+  qhat = qhat,
+  tau = tau,
+  y_lower = 0,
+  y_upper = 100
+)
+
+bounds
+#> Quantile/mean disclosure mean bounds
+#> 
+#>   m_lower m_upper
+#> 1   11.25   36.25
+#> 2   18.75   43.75
+#> 3   26.25   51.25
 
 ## Simultaneous confidence region
 region <- qlm_region(
@@ -110,59 +114,302 @@ region <- qlm_region(
   X = X,
   n_g = n_g,
   y_lower = 0,
-  y_upper = 10,
-  level = 0.95,
+  y_upper = 100,
   B = 1000
 )
+
 summary(region)
-#> Quantile-only simultaneous confidence region
+#> Quantile/mean disclosure simultaneous confidence region
 #> 
 #> Call:
 #> qlm_region(qhat = qhat, tau = tau, X = X, n_g = n_g, y_lower = 0, 
-#>     y_upper = 10, level = 0.95, B = 1000)
+#>     y_upper = 100, B = 1000)
 #> 
 #> Confidence level: 0.95 
-#> Critical value: 2.221278 
+#> Critical value: 2.364316 
 #> 
 #> Adjusted group mean constraints:
-#>      lower    upper
-#> 1 1.251654 4.248346
-#> 2 2.123364 5.376636
+#>       lower    upper
+#> 1  6.191178 41.30882
+#> 2 14.325124 48.17488
+#> 3 22.411777 55.08822
 
 ci <- confint(region)
 ci
-#> Quantile-only coefficient-wise confidence intervals
+#> Quantile/mean disclosure coefficient-wise confidence intervals
 #> 
 #> Confidence level: 0.95 
-#> Critical value: 2.221278 
+#> Critical value: 2.364316 
 #> 
-#>           lower    upper
-#> beta1  1.251654 4.248346
-#> beta2 -2.124982 4.124982
+#>               lower    upper
+#> intercept  6.191178 41.30882
+#> x         -9.448522 24.44852
 plot(ci)
 ```
 
-<img src="man/figures/README-example-1.png" width="100%" />
+<img src="man/figures/README-basic-example-1.png" width="100%" />
 
-In this simple example, the quantile summaries are specified directly,
-so no true regression parameter is defined.
+### Mixed disclosure example
 
-The confidence region should be interpreted as a set of coefficient
-values consistent with the disclosed quantiles and sampling uncertainty,
-rather than as a conventional confidence interval centered at the point
-estimate.
+The `disclosure` interface allows different groups to report different
+summary statistics.
 
-`qlm()` computes a quantile-only linear regression estimator and reports
-standard errors, z-statistics, and p-values based on the asymptotic
-approximation as the sample size and the number of disclosed quantiles
-increase.
+``` r
+disclosure <- data.frame(
+  group = c(
+    1, 1, 1,
+    2,
+    3, 3, 3
+  ),
+  type = c(
+    "quantile", "quantile", "quantile",
+    "mean",
+    "quantile", "quantile", "quantile"
+  ),
+  tau = c(
+    0.25, 0.50, 0.75,
+    NA,
+    0.25, 0.50, 0.75
+  ),
+  value = c(
+    10, 15, 20,
+    25,
+    30, 35, 40
+  ),
+  n = c(
+    100, 100, 100,
+    120,
+    150, 150, 150
+  ),
+  se = c(
+    NA, NA, NA,
+    1.5,
+    NA, NA, NA
+  )
+)
+
+X <- cbind(
+  intercept = 1,
+  x = c(0, 1, 2)
+)
+
+## Point estimation
+fit <- qlm(
+  disclosure = disclosure,
+  X = X
+)
+#> Mixed disclosure detected: quantile, mean.
+
+summary(fit)
+#> Quantile/mean disclosure linear model
+#> 
+#> Call:
+#> qlm(X = X, disclosure = disclosure)
+#> 
+#> Coefficients:
+#>                    Std.Error                     
+#> intercept 15.00000   0.84508 17.750 < 2.2e-16 ***
+#> x         10.00000   0.47585 21.015 < 2.2e-16 ***
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+## Mean bounds
+bounds <- qlm_bounds(
+  disclosure = disclosure,
+  y_lower = 0,
+  y_upper = 100
+)
+
+bounds
+#> Quantile/mean disclosure mean bounds
+#> 
+#>   m_lower m_upper
+#> 1   11.25   36.25
+#> 2   25.00   25.00
+#> 3   26.25   51.25
+
+## Simultaneous confidence region
+region <- qlm_region(
+  disclosure = disclosure,
+  X = X,
+  y_lower = 0,
+  y_upper = 100,
+  B = 1000
+)
+#> Mixed disclosure detected: quantile, mean.
+
+summary(region)
+#> Quantile/mean disclosure simultaneous confidence region
+#> 
+#> Call:
+#> qlm_region(X = X, y_lower = 0, y_upper = 100, disclosure = disclosure, 
+#>     B = 1000)
+#> 
+#> Confidence level: 0.95 
+#> Critical value: 2.334477 
+#> 
+#> Adjusted group mean constraints:
+#>       lower    upper
+#> 1  6.255024 41.24498
+#> 2 21.498285 28.50172
+#> 3 22.460218 55.03978
+
+ci <- confint(region)
+ci
+#> Quantile/mean disclosure coefficient-wise confidence intervals
+#> 
+#> Confidence level: 0.95 
+#> Critical value: 2.334477 
+#> 
+#>               lower    upper
+#> intercept  6.255024 34.54321
+#> x         -6.041497 22.24669
+plot(ci)
+```
+
+<img src="man/figures/README-mixed-disclosure-example-1.png" width="100%" />
+
+### Treatment-control contrast example
+
+The package also supports treatment-control comparisons, which are
+common in two-arm studies and meta-analysis applications.
+
+``` r
+arm_disclosure <- data.frame(
+  study = c(
+    1, 1, 1,
+    1, 1, 1,
+    2,
+    2
+  ),
+  arm = c(
+    "case", "case", "case",
+    "control", "control", "control",
+    "case",
+    "control"
+  ),
+  type = c(
+    "quantile", "quantile", "quantile",
+    "quantile", "quantile", "quantile",
+    "mean",
+    "mean"
+  ),
+  tau = c(
+    0.25, 0.50, 0.75,
+    0.25, 0.50, 0.75,
+    NA,
+    NA
+  ),
+  value = c(
+    10, 15, 20,
+    8, 12, 16,
+    25,
+    20
+  ),
+  n = c(
+    100, 100, 100,
+    100, 100, 100,
+    120,
+    120
+  ),
+  se = c(
+    NA, NA, NA,
+    NA, NA, NA,
+    1.5,
+    1.2
+  )
+)
+
+
+## Contrast bounds
+contrast_bounds <- qlm_contrast_bounds(
+  disclosure = arm_disclosure,
+  treatment = "case",
+  control = "control",
+  y_lower = 0,
+  y_upper = 100
+)
+
+contrast_bounds
+#> Treatment-control contrast bounds
+#> 
+#>   id theta_lower theta_upper
+#> 1  1      -22.75       27.25
+#> 2  2        5.00        5.00
+
+X_contrast <- matrix(1, nrow = 2, ncol = 1)
+colnames(X_contrast) <- "intercept"
+
+## Contrast confidence region
+contrast_region <- qlm_contrast_region(
+  disclosure = arm_disclosure,
+  X = X_contrast,
+  treatment = "case",
+  control = "control",
+  y_lower = 0,
+  y_upper = 100,
+  B = 1000
+)
+
+summary(contrast_region)
+#> Quantile/mean disclosure simultaneous confidence region
+#> 
+#> Call:
+#> qlm_contrast_region(disclosure = arm_disclosure, X = X_contrast, 
+#>     treatment = "case", control = "control", y_lower = 0, y_upper = 100, 
+#>     B = 1000)
+#> 
+#> Confidence level: 0.95 
+#> Critical value: 2.330066 
+#> 
+#> Adjusted group mean constraints:
+#>        lower     upper
+#> 1 -27.732645 32.232645
+#> 2   1.835053  8.164947
+
+ci <- confint(contrast_region)
+ci
+#> Quantile/mean disclosure coefficient-wise confidence intervals
+#> 
+#> Confidence level: 0.95 
+#> Critical value: 2.330066 
+#> 
+#>              lower    upper
+#> intercept 1.835053 8.164947
+plot(ci)
+```
+
+<img src="man/figures/README-contrast-example-1.png" width="100%" />
+
+## Interpretation
+
+`qlm()` computes a linear regression estimator using reconstructed group
+means. For groups with quantile disclosure, the quantile function is
+approximated by piecewise linear interpolation and the group mean is
+obtained by integrating the resulting quantile function. For groups with
+observed means, the reported mean is used directly.
+
+`qlm_bounds()` constructs sharp bounds for group conditional means under
+known support restrictions.
 
 `qlm_region()` constructs a simultaneous confidence region under partial
-identification with a fixed number of disclosed quantiles.
-Coefficient-wise confidence intervals are obtained by projecting this
-region using `confint()`.
+identification with a fixed number of disclosed quantiles or mixed
+disclosure. Coefficient-wise confidence intervals are obtained by
+projecting this region using `confint()`.
 
-## References
+`qlm_contrast_bounds()` and `qlm_contrast_region()` extend these tools
+to treatment-control contrasts, which are common in two-arm studies and
+meta-analysis applications.
+
+For point estimation of treatment-control contrasts, users can first
+construct study-level mean differences and their standard errors from
+the arm-level summaries, and then apply `qlm()` by treating these
+differences as observed means. The contrast-specific functions
+`qlm_contrast_bounds()` and `qlm_contrast_region()` are designed for
+partial identification and simultaneous confidence regions for
+treatment-control contrasts.
+
+## Citation
 
 If you use `qonlyreg`, please cite:
 

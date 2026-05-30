@@ -2,38 +2,136 @@
 % Please edit documentation in R/qlm_bounds.R
 \name{qlm_bounds}
 \alias{qlm_bounds}
-\title{Compute mean bounds from disclosed quantiles}
+\title{Compute mean bounds from disclosed quantiles or observed means}
 \usage{
-qlm_bounds(qhat, tau, y_lower, y_upper)
+qlm_bounds(
+  qhat = NULL,
+  tau = NULL,
+  y_lower = NULL,
+  y_upper = NULL,
+  disclosure = NULL
+)
 }
 \arguments{
 \item{qhat}{A G by K matrix of disclosed sample quantiles. Each row
-corresponds to a group and each column corresponds to a quantile
-level in \code{tau}. Quantiles must be ordered increasingly within each row.}
+corresponds to a group and each column corresponds to a quantile level
+in \code{tau}. This is the legacy common-grid quantile-only interface.
+Ignored if \code{disclosure} is supplied.}
 
-\item{tau}{A numeric vector of length K containing quantile levels
-in (0, 1), sorted in increasing order.}
+\item{tau}{A numeric vector of length K containing quantile levels in
+(0, 1), sorted in increasing order. This is the legacy common-grid
+quantile-only interface. Ignored if \code{disclosure} is supplied.}
 
 \item{y_lower}{A numeric vector of length G, or a scalar, giving known
-lower support endpoints for each group.}
+lower support endpoints for each group. For quantile disclosures,
+support bounds must be supplied either through this argument and
+\code{y_upper}, or through columns \code{y_lower} and \code{y_upper} in \code{disclosure}.}
 
 \item{y_upper}{A numeric vector of length G, or a scalar, giving known
-upper support endpoints for each group.}
+upper support endpoints for each group. For quantile disclosures,
+support bounds must be supplied either through \code{y_lower} and this
+argument, or through columns \code{y_lower} and \code{y_upper} in \code{disclosure}.}
+
+\item{disclosure}{Optional group-level disclosure object. This may be
+either a list or a data.frame. If supplied, this takes precedence over
+\code{qhat} and \code{tau}.
+
+A list input should contain one element per group. Each element should
+be a list with \code{type = "quantile"}, \code{type = "mean"}, or
+\code{type = "mean_quantile"}. Quantile disclosures require \code{tau} and
+\code{qhat}. Mean disclosures require \code{mean}. For quantile disclosures,
+support bounds must be supplied either through \code{y_lower} and \code{y_upper}
+inside each group element or through the function arguments \code{y_lower}
+and \code{y_upper}.
+
+A data.frame input should be in long format. It must contain a group
+identifier column and a \code{type} column. The group identifier column is
+detected from one of \code{group}, \code{group_id}, \code{study}, \code{study_id}, or \code{id}.
+The \code{type} column indicates whether each row reports a quantile or a
+mean. Supported values are \code{quantile}, \code{q}, \code{quantiles}, \code{mean}, and
+\code{m}.
+
+Quantile rows require a \code{tau} column and one disclosed-value column.
+The disclosed-value column may be named \code{value}, \code{qhat}, or \code{estimate}.
+
+Mean rows require either a \code{mean} column or one disclosed-value column
+named \code{value}, \code{qhat}, or \code{estimate}.
+
+For quantile disclosures, support bounds must be supplied either
+through columns \code{y_lower} and \code{y_upper} in the data.frame or through
+the function arguments \code{y_lower} and \code{y_upper}.
+
+#' @examples
+\subsection{Legacy common-grid interface}{
+
+qhat <- rbind(
+c(10, 15, 20),
+c(20, 25, 30)
+)
+
+tau <- c(0.25, 0.50, 0.75)
+
+bounds <- qlm_bounds(
+qhat = qhat,
+tau = tau,
+y_lower = 0,
+y_upper = 100
+)
+
+bounds
+}
+
+\subsection{Disclosure data.frame interface}{
+
+disclosure <- data.frame(
+group = c(
+1, 1, 1,
+2
+),
+type = c(
+"quantile", "quantile", "quantile",
+"mean"
+),
+tau = c(
+0.25, 0.50, 0.75,
+NA
+),
+value = c(
+10, 15, 20,
+25
+)
+)
+
+bounds <- qlm_bounds(
+disclosure = disclosure,
+y_lower = 0,
+y_upper = 100
+)
+
+bounds
+}}
 }
 \value{
 An object of class \code{"qlm_bounds"} containing:
 \describe{
 \item{m_lower}{Estimated lower bounds for group conditional means.}
 \item{m_upper}{Estimated upper bounds for group conditional means.}
-\item{qhat}{Input matrix of disclosed sample quantiles.}
-\item{tau}{Input quantile levels.}
+\item{disclosure}{Standardized group-level disclosure objects.}
+\item{qhat}{Input matrix of disclosed sample quantiles for the legacy
+common-grid interface. Set to \code{NULL} for heterogeneous disclosure.}
+\item{tau}{Input quantile levels for the legacy common-grid interface.
+Set to \code{NULL} for heterogeneous disclosure.}
 \item{y_lower}{Lower support endpoints.}
 \item{y_upper}{Upper support endpoints.}
-\item{weights_lower}{Weights on disclosed quantiles for lower bounds.}
-\item{weights_upper}{Weights on disclosed quantiles for upper bounds.}
+\item{weights_lower}{A list of weights on disclosed quantiles for lower
+bounds.}
+\item{weights_upper}{A list of weights on disclosed quantiles for upper
+bounds.}
 }
 }
 \description{
-Compute sharp lower and upper bounds for group conditional means
-using disclosed group-level quantiles and known support endpoints.
+Compute sharp lower and upper bounds for group conditional means using
+disclosed group-level quantiles and known support endpoints. If a group
+reports an exact mean, the lower and upper bounds are both set equal to
+the reported mean.
 }
