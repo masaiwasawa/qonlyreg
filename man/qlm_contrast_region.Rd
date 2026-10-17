@@ -13,7 +13,9 @@ qlm_contrast_region(
   y_upper = NULL,
   level = 0.95,
   B = 10000,
-  density_floor = 1e-08
+  density_floor = 1e-08,
+  y_lower_bound = NULL,
+  y_upper_bound = NULL
 )
 }
 \arguments{
@@ -41,9 +43,11 @@ disclosures, at least one of \code{var}, \code{se}, or \code{sd} must also be su
 Here \code{var} refers to the variance of the reported mean estimator, not
 the variance of the underlying observations.
 
-For quantile disclosures, support bounds must be supplied either
-through columns \code{y_lower} and \code{y_upper} in \code{disclosure} or through
-the function arguments \code{y_lower} and \code{y_upper}.}
+For quantile disclosures, each side must be specified by either an
+exact endpoint (\code{y_lower} or \code{y_upper}) or a support bound
+(\code{y_lower_bound} or \code{y_upper_bound}). These values may be supplied
+through columns in \code{disclosure} or through the corresponding
+function arguments.}
 
 \item{X}{A G by p matrix of group-level covariates. Rows must correspond
 to the matched groups after alignment by the detected group identifier.}
@@ -56,15 +60,13 @@ For example, if \code{arm} takes values \code{"case"} and \code{"control"}, set
 For example, if \code{arm} takes values \code{"case"} and \code{"control"}, set
 \code{control = "control"}.}
 
-\item{y_lower}{A scalar or numeric vector giving lower support endpoints.
-For quantile disclosures, support bounds must be supplied either
-through this argument and \code{y_upper}, or through columns \code{y_lower} and
-\code{y_upper} in \code{disclosure}.}
+\item{y_lower}{A scalar or numeric vector giving exact lower support
+endpoints, if known. Exact endpoints are used both in mean bounding
+and as finite-difference boundary nodes.}
 
-\item{y_upper}{A scalar or numeric vector giving upper support endpoints.
-For quantile disclosures, support bounds must be supplied either
-through \code{y_lower} and this argument, or through columns \code{y_lower} and
-\code{y_upper} in \code{disclosure}.}
+\item{y_upper}{A scalar or numeric vector giving exact upper support
+endpoints, if known. Exact endpoints are used both in mean bounding
+and as finite-difference boundary nodes.}
 
 \item{level}{Confidence level. Default is 0.95.}
 
@@ -73,6 +75,14 @@ simultaneous critical value.}
 
 \item{density_floor}{A positive lower bound used to avoid numerical
 instability in density estimation.}
+
+\item{y_lower_bound}{A scalar or numeric vector giving known lower
+support bounds. These values are used in mean bounding when
+\code{y_lower} is not supplied and are not used as finite-difference nodes.}
+
+\item{y_upper_bound}{A scalar or numeric vector giving known upper
+support bounds. These values are used in mean bounding when
+\code{y_upper} is not supplied and are not used as finite-difference nodes.}
 }
 \value{
 An object of class \code{"qlm_contrast_region"} and \code{"qlm_region"} containing:

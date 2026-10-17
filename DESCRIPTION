@@ -24,7 +24,9 @@ Imports:
     MASS
 Suggests: 
     knitr,
-    rmarkdown
+    rmarkdown,
+    testthat (>= 3.0.0)
 VignetteBuilder: knitr
 URL: https://github.com/masaiwasawa/qonlyreg
 BugReports: https://github.com/masaiwasawa/qonlyreg/issues
+Config/testthat/edition: 3

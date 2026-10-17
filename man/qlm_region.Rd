@@ -14,7 +14,9 @@ qlm_region(
   disclosure = NULL,
   level = 0.95,
   B = 10000,
-  density_floor = 1e-08
+  density_floor = 1e-08,
+  y_lower_bound = NULL,
+  y_upper_bound = NULL
 )
 }
 \arguments{
@@ -34,19 +36,23 @@ to the groups represented by \code{qhat} or \code{disclosure}, in the same order
 the legacy common-grid quantile-only interface. Ignored if \code{disclosure}
 is supplied.}
 
-\item{y_lower}{A numeric vector of length G, or a scalar, giving known
-lower support endpoints for each group. For quantile disclosures,
-support bounds must be supplied either through this argument and
-\code{y_upper}, or through columns \code{y_lower} and \code{y_upper} in \code{disclosure}.}
+\item{y_lower}{A numeric vector of length G, or a scalar, giving the
+exact lower endpoint of the conditional outcome support for each group,
+if known. When supplied, it is used both in constructing the group-mean
+bounds and as a deterministic boundary node in finite-difference
+estimation of quantile-function derivatives.}
 
-\item{y_upper}{A numeric vector of length G, or a scalar, giving known
-upper support endpoints for each group. For quantile disclosures,
-support bounds must be supplied either through \code{y_lower} and this
-argument, or through columns \code{y_lower} and \code{y_upper} in \code{disclosure}.}
+\item{y_upper}{A numeric vector of length G, or a scalar, giving the
+exact upper endpoint of the conditional outcome support for each group,
+if known. When supplied, it is used both in constructing the group-mean
+bounds and as a deterministic boundary node in finite-difference
+estimation of quantile-function derivatives.}
 
 \item{disclosure}{Optional group-level disclosure object. This may be
-either a list or a data.frame. If supplied, this takes precedence over
-\code{qhat}, \code{tau}, \code{n_g}, \code{y_lower}, and \code{y_upper} where applicable.
+either a list or a data.frame. If supplied, it takes precedence over
+\code{qhat}, \code{tau}, and \code{n_g}. Group-specific endpoint and support-bound
+values in \code{disclosure} take precedence over the corresponding
+function-level arguments.
 
 A data.frame input should be in long format. It must contain a group
 identifier column, a \code{type} column, and an \code{n} column. The group
@@ -55,8 +61,10 @@ identifier column is detected from one of \code{group}, \code{group_id}, \code{s
 reports a quantile or a mean. Supported values are \code{quantile}, \code{q},
 \code{quantiles}, \code{mean}, and \code{m}.
 
-Quantile rows require a \code{tau} column and one disclosed-value column.
-The disclosed-value column may be named \code{value}, \code{qhat}, or \code{estimate}.
+Quantile disclosures require \code{tau}, \code{qhat}, and \code{n},
+together with a lower endpoint or support bound and an upper
+endpoint or support bound, supplied either within each group
+element or through the function arguments.
 
 Mean rows require either a \code{mean} column or one disclosed-value column
 named \code{value}, \code{qhat}, or \code{estimate}. For inference with mean
@@ -64,9 +72,11 @@ disclosures, at least one of \code{var}, \code{se}, or \code{sd} must also be su
 Here \code{var} refers to the variance of the reported mean estimator, not
 the variance of the underlying observations.
 
-For quantile disclosures, support bounds must be supplied either
-through columns \code{y_lower} and \code{y_upper} in \code{disclosure} or through
-the function arguments \code{y_lower} and \code{y_upper}.
+For a quantile disclosure, each side of the support must be specified
+either by an exact endpoint (\code{y_lower} or \code{y_upper}) or by a support
+bound (\code{y_lower_bound} or \code{y_upper_bound}). These values may be supplied
+through columns in \code{disclosure} or through the corresponding function
+arguments.
 
 A list input should contain one element per group. Each element should
 be a list with \code{type = "quantile"}, \code{type = "mean"}, or
@@ -82,6 +92,16 @@ simultaneous critical value.}
 
 \item{density_floor}{A positive lower bound used to avoid numerical
 instability in density estimation.}
+
+\item{y_lower_bound}{A numeric vector of length G, or a scalar, giving a
+known lower bound on the conditional outcome support for each group.
+It is used to construct the group-mean bounds when \code{y_lower} is not
+supplied and is not used as a finite-difference boundary node.}
+
+\item{y_upper_bound}{A numeric vector of length G, or a scalar, giving a
+known upper bound on the conditional outcome support for each group.
+It is used to construct the group-mean bounds when \code{y_upper} is not
+supplied and is not used as a finite-difference boundary node.}
 }
 \value{
 An object of class \code{"qlm_region"} containing:
@@ -101,88 +121,6 @@ region.}
 \item{n_g}{Group sizes.}
 \item{call}{Matched function call.}
 }
-
-#' @examples
-\subsection{Legacy common-grid quantile-only interface}{
-
-qhat <- rbind(
-c(10, 15, 20),
-c(20, 25, 30),
-c(30, 35, 40)
-)
-
-tau <- c(0.25, 0.50, 0.75)
-
-X <- cbind(
-intercept = 1,
-x = c(0, 1, 2)
-)
-
-n_g <- c(100, 120, 150)
-
-region <- qlm_region(
-qhat = qhat,
-tau = tau,
-X = X,
-n_g = n_g,
-y_lower = 0,
-y_upper = 100,
-B = 100
-)
-
-region
-confint(region)
-
-#' ## Disclosure data.frame interface with mixed disclosure
-disclosure <- data.frame(
-group = c(
-1, 1, 1,
-2,
-3, 3, 3
-),
-type = c(
-"quantile", "quantile", "quantile",
-"mean",
-"quantile", "quantile", "quantile"
-),
-tau = c(
-0.25, 0.50, 0.75,
-NA,
-0.25, 0.50, 0.75
-),
-value = c(
-10, 15, 20,
-25,
-30, 35, 40
-),
-n = c(
-100, 100, 100,
-120,
-150, 150, 150
-),
-se = c(
-NA, NA, NA,
-1.5,
-NA, NA, NA
-)
-)
-
-X <- cbind(
-intercept = 1,
-x = c(0, 1, 2)
-)
-
-region <- qlm_region(
-disclosure = disclosure,
-X = X,
-y_lower = 0,
-y_upper = 100,
-B = 100
-)
-
-region
-confint(region)
-}
 }
 \description{
 Construct a simultaneous confidence region for regression coefficients
@@ -195,4 +133,103 @@ then forms a simultaneous confidence region for coefficients satisfying
 \deqn{
   X_g'\beta \in [\underline m_g, \overline m_g].
 }
+
+For each group with a quantile disclosure, exact support endpoints may
+be supplied through \code{y_lower} and \code{y_upper}, while support bounds that
+need not be attained may be supplied through \code{y_lower_bound} and
+\code{y_upper_bound}.
+
+Mean bounds use an exact endpoint when available and otherwise use the
+corresponding support bound. Only exact endpoints supplied through
+\code{y_lower} or \code{y_upper} are used as deterministic boundary nodes in
+finite-difference estimation of quantile-function derivatives. Values
+supplied through \code{y_lower_bound} and \code{y_upper_bound} do not enter the
+finite-difference calculation.
+The finite-difference derivative estimates are inverted to form the density
+plug-ins used to construct the quantile-disclosure blocks of \code{Omega}.
+
+When a group reports a sample mean, the estimated lower and upper mean
+bounds are both set equal to the reported mean. Its sampling uncertainty
+is obtained from the supplied \code{var}, \code{se}, or \code{sd}.
+}
+\examples{
+## Legacy common-grid quantile-only interface
+qhat <- rbind(
+  c(10, 15, 20),
+  c(20, 25, 30),
+  c(30, 35, 40)
+)
+
+tau <- c(0.25, 0.50, 0.75)
+
+X <- cbind(
+  intercept = 1,
+  x = c(0, 1, 2)
+)
+
+n_g <- c(100, 120, 150)
+
+region <- qlm_region(
+  qhat = qhat,
+  tau = tau,
+  X = X,
+  n_g = n_g,
+  y_lower = 0,
+  y_upper = 100,
+  B = 100
+)
+
+region
+confint(region)
+
+## Disclosure data.frame interface with mixed disclosure
+disclosure <- data.frame(
+  group = c(
+    1, 1, 1,
+    2,
+    3, 3, 3
+  ),
+  type = c(
+    "quantile", "quantile", "quantile",
+    "mean",
+    "quantile", "quantile", "quantile"
+  ),
+  tau = c(
+    0.25, 0.50, 0.75,
+    NA,
+    0.25, 0.50, 0.75
+  ),
+  value = c(
+    10, 15, 20,
+    25,
+    30, 35, 40
+  ),
+  n = c(
+    100, 100, 100,
+    120,
+    150, 150, 150
+  ),
+  se = c(
+    NA, NA, NA,
+    1.5,
+    NA, NA, NA
+  )
+)
+
+X <- cbind(
+  intercept = 1,
+  x = c(0, 1, 2)
+)
+
+region <- qlm_region(
+  disclosure = disclosure,
+  X = X,
+  y_lower = 0,
+  y_upper = 100,
+  B = 100
+)
+
+region
+confint(region)
+
 }

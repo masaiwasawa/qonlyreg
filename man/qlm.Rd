@@ -70,13 +70,16 @@ An object of class \code{"qlm"} containing:
 \describe{
 \item{call}{The matched function call.}
 \item{coefficients}{Estimated regression coefficients.}
-\item{vcov}{Estimated covariance matrix of the estimator. If a mean
-disclosure is supplied without \code{var}, \code{se}, or \code{sd}, this matrix
-is filled with \code{NA}.}
+\item{vcov}{Estimated covariance matrix of the estimator.
+If any group lacks the variance information required for inference,
+including a quantile-only group with one disclosed quantile,
+this matrix is filled with \code{NA}.}
 \item{se}{Estimated standard errors. If the covariance matrix cannot be
 computed, these are \code{NA}.}
 \item{m_hat}{Estimated group conditional means.}
-\item{var_m_hat}{Estimated variances of the group mean estimators.}
+\item{var_m_hat}{Estimated variances of the group mean estimators.
+For a quantile-only group with one disclosed quantile, the
+corresponding value is \code{NA}.}
 \item{disclosure}{Standardized group-level disclosure objects.}
 \item{X}{Group-level covariate matrix.}
 \item{n_g}{Group sizes.}
@@ -94,6 +97,16 @@ group. For quantile disclosures, the group mean is approximated by numerical
 integration of the disclosed quantile function. For mean disclosures, the
 reported mean is used directly. The regression coefficient is then estimated
 by weighted least squares using group sizes as weights.
+
+With a single disclosed quantile, \code{qlm()} computes the
+reconstruction-based point estimator using constant extrapolation,
+so the single quantile receives integration weight one.
+The baseline finite-difference density estimator requires at least
+two disclosed quantiles. Therefore, for a quantile-only group with
+one disclosed quantile, the group-mean variance is set to \code{NA}.
+If any group lacks variance information, the coefficient covariance
+matrix and standard errors are also set to \code{NA}, while the coefficient
+point estimates remain available.
 }
 \examples{
 ## Legacy common-grid quantile-only interface

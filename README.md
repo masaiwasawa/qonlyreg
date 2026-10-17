@@ -78,9 +78,41 @@ construct study-level mean differences and their standard errors from
 the arm-level summaries, and then apply `qlm()` by treating these
 differences as observed means.
 
+### Support bounds and covariance estimation
+
+For quantile-only disclosures, `y_lower_bound` and `y_upper_bound`
+specify known bounds on the conditional outcome support, which need not
+coincide with its actual endpoints. When the exact support endpoints are
+known, they can instead be supplied through `y_lower` and `y_upper`.
+
+To construct simultaneous confidence regions, `qlm_region()` and
+`qlm_contrast_region()` estimate the sampling covariance matrix of the
+estimated lower and upper mean bounds. For quantile-only groups, this
+requires estimating the densities at the disclosed quantiles. The
+functions use finite differences of the disclosed sample quantiles to
+estimate quantile-function derivatives, whose reciprocals provide
+density estimates. Exact support endpoints can be used as additional
+nodes in these finite differences, whereas general support bounds are
+not used there.
+
+When no exact support endpoint is available, at least two disclosed
+quantiles are required to compute the finite-difference covariance
+estimator. With a single disclosed quantile, at least one exact endpoint
+is required.
+
+For the finite-difference covariance estimator used here, asymptotically
+valid inference generally requires increasing group sample sizes and an
+increasingly dense grid of disclosed quantiles, under appropriate
+regularity and rate conditions.
+
 ## Examples
 
-The following example illustrates the basic workflow of the package:
+The following example illustrates the basic workflow of the package.
+
+In the examples, `y_lower` and `y_upper` are assumed to be the exact
+endpoints of the conditional outcome support. When only bounds on the
+support are known, users should instead specify `y_lower_bound` and
+`y_upper_bound`.
 
 ### Basic example
 
@@ -158,24 +190,24 @@ summary(region)
 #>     y_upper = 100, B = 1000)
 #> 
 #> Confidence level: 0.95 
-#> Critical value: 2.438377 
+#> Critical value: 2.408954 
 #> 
 #> Adjusted group mean constraints:
-#>       lower    upper
-#> 1  6.032713 41.46729
-#> 2 14.186517 48.31348
-#> 3 22.291547 55.20845
+#>      lower    upper
+#> 1  6.09567 41.40433
+#> 2 14.24158 48.25842
+#> 3 22.33931 55.16069
 
 ci <- confint(region)
 ci
 #> Quantile/mean disclosure coefficient-wise confidence intervals
 #> 
 #> Confidence level: 0.95 
-#> Critical value: 2.438377 
+#> Critical value: 2.408954 
 #> 
 #>               lower    upper
-#> intercept  6.032713 41.46729
-#> x         -9.587870 24.58787
+#> intercept  6.095670 41.40433
+#> x         -9.532509 24.53251
 plot(ci)
 ```
 
@@ -278,24 +310,24 @@ summary(region)
 #>     B = 1000)
 #> 
 #> Confidence level: 0.95 
-#> Critical value: 2.354287 
+#> Critical value: 2.449613 
 #> 
 #> Adjusted group mean constraints:
 #>       lower    upper
-#> 1  6.212636 41.28736
-#> 2 21.468569 28.53143
-#> 3 22.428058 55.07194
+#> 1  6.008672 41.49133
+#> 2 21.325580 28.67442
+#> 3 22.273306 55.22669
 
 ci <- confint(region)
 ci
 #> Quantile/mean disclosure coefficient-wise confidence intervals
 #> 
 #> Confidence level: 0.95 
-#> Critical value: 2.354287 
+#> Critical value: 2.449613 
 #> 
 #>               lower    upper
-#> intercept  6.212636 34.63480
-#> x         -6.103373 22.31879
+#> intercept  6.008672 35.07553
+#> x         -6.401114 22.66575
 plot(ci)
 ```
 
@@ -392,22 +424,22 @@ summary(contrast_region)
 #>     B = 1000)
 #> 
 #> Confidence level: 0.95 
-#> Critical value: 2.279484 
+#> Critical value: 2.225622 
 #> 
 #> Adjusted group mean constraints:
 #>         lower     upper
-#> 1 -29.6435554 34.143555
-#> 2   0.6212539  9.378746
+#> 1 -29.4806675 33.980668
+#> 2   0.7247194  9.275281
 
 ci <- confint(contrast_region)
 ci
 #> Quantile/mean disclosure coefficient-wise confidence intervals
 #> 
 #> Confidence level: 0.95 
-#> Critical value: 2.279484 
+#> Critical value: 2.225622 
 #> 
 #>               lower    upper
-#> intercept 0.6212539 9.378746
+#> intercept 0.7247194 9.275281
 plot(ci)
 ```
 

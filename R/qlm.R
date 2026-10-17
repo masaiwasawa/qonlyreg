@@ -55,18 +55,33 @@
 #' @param density_floor A positive lower bound used to avoid numerical
 #'   instability in density estimation.
 #'
+#'
+#' @details
+#' With a single disclosed quantile, `qlm()` computes the
+#' reconstruction-based point estimator using constant extrapolation,
+#' so the single quantile receives integration weight one.
+#' The baseline finite-difference density estimator requires at least
+#' two disclosed quantiles. Therefore, for a quantile-only group with
+#' one disclosed quantile, the group-mean variance is set to `NA`.
+#' If any group lacks variance information, the coefficient covariance
+#' matrix and standard errors are also set to `NA`, while the coefficient
+#' point estimates remain available.
+#'
 #' @return
 #' An object of class `"qlm"` containing:
 #' \describe{
 #'   \item{call}{The matched function call.}
 #'   \item{coefficients}{Estimated regression coefficients.}
-#'   \item{vcov}{Estimated covariance matrix of the estimator. If a mean
-#'     disclosure is supplied without `var`, `se`, or `sd`, this matrix
-#'     is filled with `NA`.}
+#'   \item{vcov}{Estimated covariance matrix of the estimator.
+#'     If any group lacks the variance information required for inference,
+#'     including a quantile-only group with one disclosed quantile,
+#'     this matrix is filled with `NA`.}
 #'   \item{se}{Estimated standard errors. If the covariance matrix cannot be
 #'     computed, these are `NA`.}
 #'   \item{m_hat}{Estimated group conditional means.}
-#'   \item{var_m_hat}{Estimated variances of the group mean estimators.}
+#'   \item{var_m_hat}{Estimated variances of the group mean estimators.
+#'     For a quantile-only group with one disclosed quantile, the
+#'     corresponding value is `NA`.}
 #'   \item{disclosure}{Standardized group-level disclosure objects.}
 #'   \item{X}{Group-level covariate matrix.}
 #'   \item{n_g}{Group sizes.}
@@ -199,12 +214,24 @@ qlm <- function(qhat = NULL,
     d <- disclosure[[g]]
 
     if (d$type %in% c("quantile", "mean_quantile")) {
-      if (length(d$tau) < 2) {
-        stop(
-          "qlm() requires at least two disclosed quantiles for quantile-based ",
-          "point inference. For partial identification with a single disclosed ",
-          "quantile, use qlm_region() with known support bounds."
-        )
+      if (length(d$tau) == 1L) {
+        alpha_g <- qlm_weights(d$tau)
+        m_quantile_g <- as.numeric(sum(d$qhat * alpha_g))
+        weights[[g]] <- alpha_g
+        fhat[[g]] <- NA_real_
+
+        if (d$type == "mean_quantile") {
+          qlm_warn_mean_quantile_consistency(d, group = g)
+          m_hat[g] <- d$mean
+          var_m_hat[g] <- qlm_mean_variance_from_disclosure(
+            d = d,
+            default = NA_real_
+          )
+        } else {
+          m_hat[g] <- m_quantile_g
+          var_m_hat[g] <- NA_real_
+        }
+        next
       }
 
       alpha_g <- qlm_weights(d$tau)

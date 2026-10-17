@@ -9,7 +9,9 @@ qlm_contrast_bounds(
   treatment,
   control,
   y_lower = NULL,
-  y_upper = NULL
+  y_upper = NULL,
+  y_lower_bound = NULL,
+  y_upper_bound = NULL
 )
 }
 \arguments{
@@ -33,9 +35,11 @@ The disclosed-value column may be named \code{value}, \code{qhat}, or \code{esti
 Mean rows require either a \code{mean} column or one disclosed-value column
 named \code{value}, \code{qhat}, or \code{estimate}.
 
-For quantile disclosures, support bounds must be supplied either
-through columns \code{y_lower} and \code{y_upper} in \code{disclosure} or through
-the function arguments \code{y_lower} and \code{y_upper}.}
+For quantile-only disclosures, the lower side of the support must be
+specified through either \code{y_lower} or \code{y_lower_bound}, and the upper
+side through either \code{y_upper} or \code{y_upper_bound}. These values may be
+supplied through columns in \code{disclosure} or through the corresponding
+function arguments.}
 
 \item{treatment}{Value of the \code{arm} column identifying treatment groups.
 For example, if \code{arm} takes values \code{"case"} and \code{"control"},
@@ -45,19 +49,27 @@ set \code{treatment = "case"}.}
 For example, if \code{arm} takes values \code{"case"} and \code{"control"},
 set \code{control = "control"}.}
 
-\item{y_lower}{A scalar or numeric vector giving lower support endpoints.
-This argument is passed to \code{qlm_bounds()} for both treatment and control
-arms. For quantile disclosures, support bounds must be supplied either
-through this argument and \code{y_upper}, or through columns \code{y_lower} and
-\code{y_upper} in \code{disclosure}. If scalar, the same lower bound is used for
-all groups.}
+\item{y_lower}{A scalar or numeric vector giving exact lower support
+endpoints, if known. This argument is passed to \code{qlm_bounds()} for
+both treatment and control arms. If scalar, the same lower endpoint
+is used for all groups.}
 
-\item{y_upper}{A scalar or numeric vector giving upper support endpoints.
-This argument is passed to \code{qlm_bounds()} for both treatment and control
-arms. For quantile disclosures, support bounds must be supplied either
-through \code{y_lower} and this argument, or through columns \code{y_lower} and
-\code{y_upper} in \code{disclosure}. If scalar, the same upper bound is used for
-all groups.}
+\item{y_upper}{A scalar or numeric vector giving exact upper support
+endpoints, if known. This argument is passed to \code{qlm_bounds()} for
+both treatment and control arms. If scalar, the same upper endpoint
+is used for all groups.}
+
+\item{y_lower_bound}{A scalar or numeric vector giving known lower
+bounds on the conditional outcome support when the exact lower
+endpoints are not known. This argument is passed to \code{qlm_bounds()}
+for both treatment and control arms. If scalar, the same lower bound
+is used for all groups.}
+
+\item{y_upper_bound}{A scalar or numeric vector giving known upper
+bounds on the conditional outcome support when the exact upper
+endpoints are not known. This argument is passed to \code{qlm_bounds()}
+for both treatment and control arms. If scalar, the same upper bound
+is used for all groups.}
 }
 \value{
 An object of class \code{"qlm_contrast_bounds"} containing:

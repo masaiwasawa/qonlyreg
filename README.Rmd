@@ -77,9 +77,23 @@ two-arm study applications.
 
 For point estimation of treatment-control contrasts, users can first construct study-level mean differences and their standard errors from the arm-level summaries, and then apply `qlm()` by treating these differences as observed means.
 
+
+### Support bounds and covariance estimation
+For quantile-only disclosures, `y_lower_bound` and `y_upper_bound` specify known bounds on the conditional outcome support, which need not coincide with its actual endpoints. When the exact support endpoints are known, they can instead be supplied through `y_lower` and `y_upper`.
+
+To construct simultaneous confidence regions, `qlm_region()` and `qlm_contrast_region()` estimate the sampling covariance matrix of the estimated lower and upper mean bounds. For quantile-only groups, this requires estimating the densities at the disclosed quantiles. The functions use finite differences of the disclosed sample quantiles to estimate quantile-function derivatives, whose reciprocals provide density estimates. Exact support endpoints can be used as additional nodes in these finite differences, whereas general support bounds are not used there.
+
+When no exact support endpoint is available, at least two disclosed quantiles are required to compute the finite-difference covariance estimator. With a single disclosed quantile, at least one exact endpoint is required.
+
+For the finite-difference covariance estimator used here, asymptotically valid inference generally requires increasing group sample sizes and an increasingly dense grid of disclosed quantiles, under appropriate regularity and rate conditions.
+
+
 ## Examples
 
-The following example illustrates the basic workflow of the package:
+The following example illustrates the basic workflow of the package.
+
+In the examples, `y_lower` and `y_upper` are assumed to be the exact endpoints of the conditional outcome support. When only bounds on the support are known, users should instead specify `y_lower_bound` and `y_upper_bound`.
+
 
 ### Basic example
 ```{r basic-example}

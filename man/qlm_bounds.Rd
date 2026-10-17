@@ -9,7 +9,9 @@ qlm_bounds(
   tau = NULL,
   y_lower = NULL,
   y_upper = NULL,
-  disclosure = NULL
+  disclosure = NULL,
+  y_lower_bound = NULL,
+  y_upper_bound = NULL
 )
 }
 \arguments{
@@ -22,15 +24,15 @@ Ignored if \code{disclosure} is supplied.}
 (0, 1), sorted in increasing order. This is the legacy common-grid
 quantile-only interface. Ignored if \code{disclosure} is supplied.}
 
-\item{y_lower}{A numeric vector of length G, or a scalar, giving known
-lower support endpoints for each group. For quantile disclosures,
-support bounds must be supplied either through this argument and
-\code{y_upper}, or through columns \code{y_lower} and \code{y_upper} in \code{disclosure}.}
+\item{y_lower}{A numeric vector of length G, or a scalar, giving the
+exact lower endpoint of the conditional outcome support for each group,
+if known. When supplied, it is used as the lower support bound in mean
+bounding.}
 
-\item{y_upper}{A numeric vector of length G, or a scalar, giving known
-upper support endpoints for each group. For quantile disclosures,
-support bounds must be supplied either through \code{y_lower} and this
-argument, or through columns \code{y_lower} and \code{y_upper} in \code{disclosure}.}
+\item{y_upper}{A numeric vector of length G, or a scalar, giving the
+exact upper endpoint of the conditional outcome support for each group,
+if known. When supplied, it is used as the upper support bound in mean
+bounding.}
 
 \item{disclosure}{Optional group-level disclosure object. This may be
 either a list or a data.frame. If supplied, this takes precedence over
@@ -39,10 +41,14 @@ either a list or a data.frame. If supplied, this takes precedence over
 A list input should contain one element per group. Each element should
 be a list with \code{type = "quantile"}, \code{type = "mean"}, or
 \code{type = "mean_quantile"}. Quantile disclosures require \code{tau} and
-\code{qhat}. Mean disclosures require \code{mean}. For quantile disclosures,
-support bounds must be supplied either through \code{y_lower} and \code{y_upper}
-inside each group element or through the function arguments \code{y_lower}
-and \code{y_upper}.
+\code{qhat}. Mean disclosures require \code{mean}.
+
+For a quantile-only group, the lower side of the support must be
+specified through either \code{y_lower}, for an exact lower support
+endpoint, or \code{y_lower_bound}, for a lower support bound. Similarly,
+the upper side must be specified through either \code{y_upper} or
+\code{y_upper_bound}. These values may be included in each group element
+or supplied through the corresponding function arguments.
 
 A data.frame input should be in long format. It must contain a group
 identifier column and a \code{type} column. The group identifier column is
@@ -57,59 +63,20 @@ The disclosed-value column may be named \code{value}, \code{qhat}, or \code{esti
 Mean rows require either a \code{mean} column or one disclosed-value column
 named \code{value}, \code{qhat}, or \code{estimate}.
 
-For quantile disclosures, support bounds must be supplied either
-through columns \code{y_lower} and \code{y_upper} in the data.frame or through
-the function arguments \code{y_lower} and \code{y_upper}.
+For quantile-only groups, support information may be supplied through
+columns \code{y_lower}, \code{y_upper}, \code{y_lower_bound}, and
+\code{y_upper_bound}, or through the corresponding function arguments.
+For each group, either \code{y_lower} or \code{y_lower_bound} is required on
+the lower side, and either \code{y_upper} or \code{y_upper_bound} is required
+on the upper side.}
 
-#' @examples
-\subsection{Legacy common-grid interface}{
+\item{y_lower_bound}{A numeric vector of length G, or a scalar, giving a
+known lower bound on the conditional outcome support. This argument is
+used only when \code{y_lower} is not supplied.}
 
-qhat <- rbind(
-c(10, 15, 20),
-c(20, 25, 30)
-)
-
-tau <- c(0.25, 0.50, 0.75)
-
-bounds <- qlm_bounds(
-qhat = qhat,
-tau = tau,
-y_lower = 0,
-y_upper = 100
-)
-
-bounds
-}
-
-\subsection{Disclosure data.frame interface}{
-
-disclosure <- data.frame(
-group = c(
-1, 1, 1,
-2
-),
-type = c(
-"quantile", "quantile", "quantile",
-"mean"
-),
-tau = c(
-0.25, 0.50, 0.75,
-NA
-),
-value = c(
-10, 15, 20,
-25
-)
-)
-
-bounds <- qlm_bounds(
-disclosure = disclosure,
-y_lower = 0,
-y_upper = 100
-)
-
-bounds
-}}
+\item{y_upper_bound}{A numeric vector of length G, or a scalar, giving a
+known upper bound on the conditional outcome support. This argument is
+used only when \code{y_upper} is not supplied.}
 }
 \value{
 An object of class \code{"qlm_bounds"} containing:
@@ -121,8 +88,10 @@ An object of class \code{"qlm_bounds"} containing:
 common-grid interface. Set to \code{NULL} for heterogeneous disclosure.}
 \item{tau}{Input quantile levels for the legacy common-grid interface.
 Set to \code{NULL} for heterogeneous disclosure.}
-\item{y_lower}{Lower support endpoints.}
-\item{y_upper}{Upper support endpoints.}
+\item{y_lower}{Exact lower support endpoints, where supplied.}
+\item{y_upper}{Exact upper support endpoints, where supplied.}
+\item{y_lower_bound}{Lower support bounds, where supplied.}
+\item{y_upper_bound}{Upper support bounds, where supplied.}
 \item{weights_lower}{A list of weights on disclosed quantiles for lower
 bounds.}
 \item{weights_upper}{A list of weights on disclosed quantiles for upper
@@ -130,8 +99,71 @@ bounds.}
 }
 }
 \description{
-Compute sharp lower and upper bounds for group conditional means using
-disclosed group-level quantiles and known support endpoints. If a group
-reports an exact mean, the lower and upper bounds are both set equal to
-the reported mean.
+Compute sharp lower and upper bounds for group conditional means.
+For quantile-only groups, the bounds use disclosed group-level
+quantiles and known lower and upper bounds on the conditional
+outcome support. If a group reports an exact mean, the lower and
+upper bounds are both set equal to the reported mean.
+}
+\details{
+For a quantile-only group, mean bounds require a known value
+on each side of the outcome support. An exact endpoint may be supplied
+through \code{y_lower} or \code{y_upper}; otherwise a support bound may be supplied
+through \code{y_lower_bound} or \code{y_upper_bound}.
+
+When both an endpoint and a bound are supplied on the same side, the
+endpoint is used because it is the sharper restriction. The supplied
+values must be mutually consistent.
+
+For a group with an exact mean disclosure, the reported mean determines
+both the lower and upper mean bounds, so support bounds are not needed
+to bound that group's mean.
+}
+\examples{
+
+## Legacy common-grid interface using support bounds
+qhat <- rbind(
+  c(10, 15, 20),
+  c(20, 25, 30)
+)
+
+tau <- c(0.25, 0.50, 0.75)
+
+bounds <- qlm_bounds(
+  qhat = qhat,
+  tau = tau,
+  y_lower_bound = 0,
+  y_upper_bound = 100
+)
+
+bounds
+
+## Disclosure data.frame interface using exact support endpoints
+disclosure <- data.frame(
+  group = c(
+    1, 1, 1,
+    2
+  ),
+  type = c(
+    "quantile", "quantile", "quantile",
+    "mean"
+  ),
+  tau = c(
+    0.25, 0.50, 0.75,
+    NA
+  ),
+  value = c(
+    10, 15, 20,
+    25
+  )
+)
+
+bounds <- qlm_bounds(
+  disclosure = disclosure,
+  y_lower = 0,
+  y_upper = 100
+)
+
+bounds
+
 }

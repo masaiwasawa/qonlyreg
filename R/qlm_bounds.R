@@ -1,9 +1,10 @@
 #' Compute mean bounds from disclosed quantiles or observed means
 #'
-#' Compute sharp lower and upper bounds for group conditional means using
-#' disclosed group-level quantiles and known support endpoints. If a group
-#' reports an exact mean, the lower and upper bounds are both set equal to
-#' the reported mean.
+#' Compute sharp lower and upper bounds for group conditional means.
+#' For quantile-only groups, the bounds use disclosed group-level
+#' quantiles and known lower and upper bounds on the conditional
+#' outcome support. If a group reports an exact mean, the lower and
+#' upper bounds are both set equal to the reported mean.
 #'
 #' @param qhat A G by K matrix of disclosed sample quantiles. Each row
 #'   corresponds to a group and each column corresponds to a quantile level
@@ -12,14 +13,20 @@
 #' @param tau A numeric vector of length K containing quantile levels in
 #'   (0, 1), sorted in increasing order. This is the legacy common-grid
 #'   quantile-only interface. Ignored if `disclosure` is supplied.
-#' @param y_lower A numeric vector of length G, or a scalar, giving known
-#'   lower support endpoints for each group. For quantile disclosures,
-#'   support bounds must be supplied either through this argument and
-#'   `y_upper`, or through columns `y_lower` and `y_upper` in `disclosure`.
-#' @param y_upper A numeric vector of length G, or a scalar, giving known
-#'   upper support endpoints for each group. For quantile disclosures,
-#'   support bounds must be supplied either through `y_lower` and this
-#'   argument, or through columns `y_lower` and `y_upper` in `disclosure`.
+#' @param y_lower A numeric vector of length G, or a scalar, giving the
+#'   exact lower endpoint of the conditional outcome support for each group,
+#'   if known. When supplied, it is used as the lower support bound in mean
+#'   bounding.
+#' @param y_upper A numeric vector of length G, or a scalar, giving the
+#'   exact upper endpoint of the conditional outcome support for each group,
+#'   if known. When supplied, it is used as the upper support bound in mean
+#'   bounding.
+#' @param y_lower_bound A numeric vector of length G, or a scalar, giving a
+#'   known lower bound on the conditional outcome support. This argument is
+#'   used only when `y_lower` is not supplied.
+#' @param y_upper_bound A numeric vector of length G, or a scalar, giving a
+#'   known upper bound on the conditional outcome support. This argument is
+#'   used only when `y_upper` is not supplied.
 #' @param disclosure Optional group-level disclosure object. This may be
 #'   either a list or a data.frame. If supplied, this takes precedence over
 #'   `qhat` and `tau`.
@@ -27,10 +34,14 @@
 #'   A list input should contain one element per group. Each element should
 #'   be a list with `type = "quantile"`, `type = "mean"`, or
 #'   `type = "mean_quantile"`. Quantile disclosures require `tau` and
-#'   `qhat`. Mean disclosures require `mean`. For quantile disclosures,
-#'   support bounds must be supplied either through `y_lower` and `y_upper`
-#'   inside each group element or through the function arguments `y_lower`
-#'   and `y_upper`.
+#'   `qhat`. Mean disclosures require `mean`.
+#'
+#'   For a quantile-only group, the lower side of the support must be
+#'   specified through either `y_lower`, for an exact lower support
+#'   endpoint, or `y_lower_bound`, for a lower support bound. Similarly,
+#'   the upper side must be specified through either `y_upper` or
+#'   `y_upper_bound`. These values may be included in each group element
+#'   or supplied through the corresponding function arguments.
 #'
 #'   A data.frame input should be in long format. It must contain a group
 #'   identifier column and a `type` column. The group identifier column is
@@ -45,13 +56,30 @@
 #'   Mean rows require either a `mean` column or one disclosed-value column
 #'   named `value`, `qhat`, or `estimate`.
 #'
-#'   For quantile disclosures, support bounds must be supplied either
-#'   through columns `y_lower` and `y_upper` in the data.frame or through
-#'   the function arguments `y_lower` and `y_upper`.
+#'   For quantile-only groups, support information may be supplied through
+#'   columns `y_lower`, `y_upper`, `y_lower_bound`, and
+#'   `y_upper_bound`, or through the corresponding function arguments.
+#'   For each group, either `y_lower` or `y_lower_bound` is required on
+#'   the lower side, and either `y_upper` or `y_upper_bound` is required
+#'   on the upper side.
 #'
-#'#' @examples
+#' @details
+#' For a quantile-only group, mean bounds require a known value
+#' on each side of the outcome support. An exact endpoint may be supplied
+#' through `y_lower` or `y_upper`; otherwise a support bound may be supplied
+#' through `y_lower_bound` or `y_upper_bound`.
 #'
-#' ## Legacy common-grid interface
+#' When both an endpoint and a bound are supplied on the same side, the
+#' endpoint is used because it is the sharper restriction. The supplied
+#' values must be mutually consistent.
+#'
+#' For a group with an exact mean disclosure, the reported mean determines
+#' both the lower and upper mean bounds, so support bounds are not needed
+#' to bound that group's mean.
+#'
+#' @examples
+#'
+#' ## Legacy common-grid interface using support bounds
 #' qhat <- rbind(
 #'   c(10, 15, 20),
 #'   c(20, 25, 30)
@@ -62,13 +90,13 @@
 #' bounds <- qlm_bounds(
 #'   qhat = qhat,
 #'   tau = tau,
-#'   y_lower = 0,
-#'   y_upper = 100
+#'   y_lower_bound = 0,
+#'   y_upper_bound = 100
 #' )
 #'
 #' bounds
 #'
-#' ## Disclosure data.frame interface
+#' ## Disclosure data.frame interface using exact support endpoints
 #' disclosure <- data.frame(
 #'   group = c(
 #'     1, 1, 1,
@@ -106,8 +134,10 @@
 #'     common-grid interface. Set to `NULL` for heterogeneous disclosure.}
 #'   \item{tau}{Input quantile levels for the legacy common-grid interface.
 #'     Set to `NULL` for heterogeneous disclosure.}
-#'   \item{y_lower}{Lower support endpoints.}
-#'   \item{y_upper}{Upper support endpoints.}
+#'   \item{y_lower}{Exact lower support endpoints, where supplied.}
+#'   \item{y_upper}{Exact upper support endpoints, where supplied.}
+#'   \item{y_lower_bound}{Lower support bounds, where supplied.}
+#'   \item{y_upper_bound}{Upper support bounds, where supplied.}
 #'   \item{weights_lower}{A list of weights on disclosed quantiles for lower
 #'     bounds.}
 #'   \item{weights_upper}{A list of weights on disclosed quantiles for upper
@@ -119,14 +149,18 @@ qlm_bounds <- function(qhat = NULL,
                        tau = NULL,
                        y_lower = NULL,
                        y_upper = NULL,
-                       disclosure = NULL) {
+                       disclosure = NULL,
+                       y_lower_bound = NULL,
+                       y_upper_bound = NULL) {
 
   disclosure <- as_qlm_bounds_disclosure(
     disclosure = disclosure,
     qhat = qhat,
     tau = tau,
     y_lower = y_lower,
-    y_upper = y_upper
+    y_upper = y_upper,
+    y_lower_bound = y_lower_bound,
+    y_upper_bound = y_upper_bound
   )
 
   G <- length(disclosure)
@@ -135,6 +169,8 @@ qlm_bounds <- function(qhat = NULL,
   m_upper <- numeric(G)
   y_lower_vec <- rep(NA_real_, G)
   y_upper_vec <- rep(NA_real_, G)
+  y_lower_bound_vec <- rep(NA_real_, G)
+  y_upper_bound_vec <- rep(NA_real_, G)
   weights_lower <- vector("list", G)
   weights_upper <- vector("list", G)
 
@@ -144,31 +180,43 @@ qlm_bounds <- function(qhat = NULL,
     if (d$type %in% c("mean", "mean_quantile")) {
       m_lower[g] <- d$mean
       m_upper[g] <- d$mean
-      y_lower_vec[g] <- if (!is.null(d$y_lower)) d$y_lower else NA_real_
-      y_upper_vec[g] <- if (!is.null(d$y_upper)) d$y_upper else NA_real_
+      y_lower_endpoint <- d[["y_lower"]]
+      y_upper_endpoint <- d[["y_upper"]]
+      y_lower_vec[g] <- if (!is.null(y_lower_endpoint)) {y_lower_endpoint} else { NA_real_}
+      y_upper_vec[g] <- if (!is.null(y_upper_endpoint)) {y_upper_endpoint} else { NA_real_}
+      y_lower_bound_vec[g] <- if (!is.null(d$y_lower_bound)) d$y_lower_bound else NA_real_
+      y_upper_bound_vec[g] <- if (!is.null(d$y_upper_bound)) d$y_upper_bound else NA_real_
       weights_lower[[g]] <- NA_real_
       weights_upper[[g]] <- NA_real_
     }
 
     if (d$type == "quantile") {
-      if (is.null(d$y_lower) || is.null(d$y_upper)) {
+      lower_for_bounds <- qlm_bounds_lower_for_bounds(d)
+      upper_for_bounds <- qlm_bounds_upper_for_bounds(d)
+
+      if (is.null(lower_for_bounds) || is.null(upper_for_bounds)) {
         stop(
           "Quantile-only group ", g,
-          " requires y_lower and y_upper."
+          " requires a lower endpoint or lower support bound and ",
+          "an upper endpoint or upper support bound."
         )
       }
 
       bound_g <- qlm_bounds_one_group(
         qhat = d$qhat,
         tau = d$tau,
-        y_lower = d$y_lower,
-        y_upper = d$y_upper
+        y_lower_bound = lower_for_bounds,
+        y_upper_bound = upper_for_bounds
       )
 
       m_lower[g] <- bound_g$m_lower
       m_upper[g] <- bound_g$m_upper
-      y_lower_vec[g] <- d$y_lower
-      y_upper_vec[g] <- d$y_upper
+      y_lower_endpoint <- d[["y_lower"]]
+      y_upper_endpoint <- d[["y_upper"]]
+      y_lower_vec[g] <- if (!is.null(y_lower_endpoint)) {y_lower_endpoint} else { NA_real_}
+      y_upper_vec[g] <- if (!is.null(y_upper_endpoint)) {y_upper_endpoint} else { NA_real_}
+      y_lower_bound_vec[g] <- if (!is.null(d$y_lower_bound)) d$y_lower_bound else NA_real_
+      y_upper_bound_vec[g] <- if (!is.null(d$y_upper_bound)) d$y_upper_bound else NA_real_
       weights_lower[[g]] <- bound_g$weights_lower
       weights_upper[[g]] <- bound_g$weights_upper
     }
@@ -194,6 +242,8 @@ qlm_bounds <- function(qhat = NULL,
     tau = legacy_tau,
     y_lower = y_lower_vec,
     y_upper = y_upper_vec,
+    y_lower_bound = y_lower_bound_vec,
+    y_upper_bound = y_upper_bound_vec,
     weights_lower = weights_lower,
     weights_upper = weights_upper
   )
@@ -219,7 +269,9 @@ as_qlm_bounds_disclosure <- function(disclosure = NULL,
                                      qhat = NULL,
                                      tau = NULL,
                                      y_lower = NULL,
-                                     y_upper = NULL) {
+                                     y_upper = NULL,
+                                     y_lower_bound = NULL,
+                                     y_upper_bound = NULL) {
   if (!is.null(disclosure)) {
     if (is.data.frame(disclosure)) {
       disclosure <- qlm_bounds_disclosure_from_data_frame(disclosure)
@@ -234,7 +286,9 @@ as_qlm_bounds_disclosure <- function(disclosure = NULL,
     disclosure <- qlm_bounds_attach_support(
       disclosure = disclosure,
       y_lower = y_lower,
-      y_upper = y_upper
+      y_upper = y_upper,
+      y_lower_bound = y_lower_bound,
+      y_upper_bound = y_upper_bound
     )
 
     for (g in seq_along(disclosure)) {
@@ -268,22 +322,39 @@ as_qlm_bounds_disclosure <- function(disclosure = NULL,
     stop("length(tau) must equal ncol(qhat).")
   }
 
-  y_lower <- qlm_bounds_recycle_support(y_lower, G, "y_lower")
-  y_upper <- qlm_bounds_recycle_support(y_upper, G, "y_upper")
+  y_lower <- qlm_bounds_recycle_optional(y_lower, G, "y_lower")
+  y_upper <- qlm_bounds_recycle_optional(y_upper, G, "y_upper")
+  y_lower_bound <- qlm_bounds_recycle_optional(
+    y_lower_bound, G, "y_lower_bound"
+  )
+  y_upper_bound <- qlm_bounds_recycle_optional(
+    y_upper_bound, G, "y_upper_bound"
+  )
 
   disclosure <- vector("list", G)
 
   for (g in seq_len(G)) {
-    disclosure[[g]] <- list(
+    d <- list(
       type = "quantile",
       tau = tau,
-      qhat = as.numeric(qhat[g, ]),
-      y_lower = y_lower[g],
-      y_upper = y_upper[g]
+      qhat = as.numeric(qhat[g, ])
     )
 
+    if (!is.null(y_lower)) {
+      d$y_lower <- y_lower[g]
+    }
+    if (!is.null(y_upper)) {
+      d$y_upper <- y_upper[g]
+    }
+    if (!is.null(y_lower_bound)) {
+      d$y_lower_bound <- y_lower_bound[g]
+    }
+    if (!is.null(y_upper_bound)) {
+      d$y_upper_bound <- y_upper_bound[g]
+    }
+
     disclosure[[g]] <- validate_qlm_bounds_disclosure_one(
-      disclosure[[g]],
+      d,
       group = g
     )
   }
@@ -291,6 +362,16 @@ as_qlm_bounds_disclosure <- function(disclosure = NULL,
   disclosure
 }
 
+
+qlm_bounds_lower_for_bounds <- function(d) {
+  if (!is.null(d[["y_lower"]])) {return(d[["y_lower"]])}
+  d$y_lower_bound
+}
+
+qlm_bounds_upper_for_bounds <- function(d) {
+  if (!is.null(d[["y_upper"]])) {return(d[["y_upper"]])}
+  d$y_upper_bound
+}
 
 qlm_bounds_disclosure_from_data_frame <- function(df) {
   if (!is.data.frame(df)) {
@@ -389,23 +470,32 @@ qlm_bounds_disclosure_from_data_frame <- function(df) {
       out$mean <- mean_values[1]
     }
 
-    if ("y_lower" %in% names(dg)) {
-      y_lower_values <- unique(stats::na.omit(as.numeric(dg$y_lower)))
-      if (length(y_lower_values) > 1) {
-        stop("Each group must have at most one unique y_lower value.")
-      }
-      if (length(y_lower_values) == 1) {
-        out$y_lower <- y_lower_values[1]
-      }
-    }
+    support_names <- c(
+      "y_lower",
+      "y_upper",
+      "y_lower_bound",
+      "y_upper_bound"
+    )
 
-    if ("y_upper" %in% names(dg)) {
-      y_upper_values <- unique(stats::na.omit(as.numeric(dg$y_upper)))
-      if (length(y_upper_values) > 1) {
-        stop("Each group must have at most one unique y_upper value.")
-      }
-      if (length(y_upper_values) == 1) {
-        out$y_upper <- y_upper_values[1]
+    for (nm in support_names) {
+      if (nm %in% names(dg)) {
+        values <- unique(
+          stats::na.omit(
+            as.numeric(dg[[nm]])
+          )
+        )
+
+        if (length(values) > 1L) {
+          stop(
+            "Each group must have at most one unique ",
+            nm,
+            " value."
+          )
+        }
+
+        if (length(values) == 1L) {
+          out[[nm]] <- values[1L]
+        }
       }
     }
 
@@ -427,25 +517,28 @@ qlm_bounds_disclosure_from_data_frame <- function(df) {
 
 qlm_bounds_attach_support <- function(disclosure,
                                       y_lower = NULL,
-                                      y_upper = NULL) {
+                                      y_upper = NULL,
+                                      y_lower_bound = NULL,
+                                      y_upper_bound = NULL) {
+
   G <- length(disclosure)
 
-  if (!is.null(y_lower)) {
-    y_lower <- qlm_bounds_recycle_support(y_lower, G, "y_lower")
+  supplied <- list(
+    y_lower = y_lower,
+    y_upper = y_upper,
+    y_lower_bound = y_lower_bound,
+    y_upper_bound = y_upper_bound
+  )
+
+  for (nm in names(supplied)) {
+    x <- supplied[[nm]]
+
+    if (is.null(x)) {next}
+    x <- qlm_bounds_recycle_optional(x, G, nm)
 
     for (g in seq_len(G)) {
-      if (is.null(disclosure[[g]]$y_lower)) {
-        disclosure[[g]]$y_lower <- y_lower[g]
-      }
-    }
-  }
-
-  if (!is.null(y_upper)) {
-    y_upper <- qlm_bounds_recycle_support(y_upper, G, "y_upper")
-
-    for (g in seq_len(G)) {
-      if (is.null(disclosure[[g]]$y_upper)) {
-        disclosure[[g]]$y_upper <- y_upper[g]
+      if (is.null(disclosure[[g]][[nm]])) {
+        disclosure[[g]][[nm]] <- x[g]
       }
     }
   }
@@ -453,13 +546,12 @@ qlm_bounds_attach_support <- function(disclosure,
   disclosure
 }
 
-
-qlm_bounds_recycle_support <- function(x, G, name) {
+qlm_bounds_recycle_optional <- function(x, G, name) {
   if (is.null(x)) {
-    stop(name, " must be supplied for quantile-only mean bounds.")
+    return(NULL)
   }
 
-  if (length(x) == 1) {
+  if (length(x) == 1L) {
     x <- rep(x, G)
   }
 
@@ -476,26 +568,39 @@ qlm_bounds_recycle_support <- function(x, G, name) {
   x
 }
 
-
 validate_qlm_bounds_disclosure_one <- function(d, group) {
+
+  # ---------------------------------------------------------------
+  # 1. Basic disclosure structure
+  # ---------------------------------------------------------------
+
   if (!is.list(d)) {
     stop("disclosure[[", group, "]] must be a list.")
   }
 
-  if (is.null(d$type)) {
-    stop("disclosure[[", group, "]] must contain type.")
+  if (is.null(d$type) || length(d$type) != 1L) {
+    stop(
+      "disclosure[[", group,
+      "]] must contain a scalar type."
+    )
   }
 
   d$type <- tolower(as.character(d$type))
 
-  if (!d$type %in% c("quantile", "mean", "mean_quantile")) {
+  if (is.na(d$type) ||
+      !(d$type %in% c("quantile", "mean", "mean_quantile"))) {
     stop(
       "disclosure[[", group, "]]$type must be one of ",
       "'quantile', 'mean', or 'mean_quantile'."
     )
   }
 
+  # ---------------------------------------------------------------
+  # 2. Quantile disclosure
+  # ---------------------------------------------------------------
+
   if (d$type %in% c("quantile", "mean_quantile")) {
+
     if (is.null(d$tau) || is.null(d$qhat)) {
       stop(
         "disclosure[[", group, "]] with type '", d$type,
@@ -508,88 +613,199 @@ validate_qlm_bounds_disclosure_one <- function(d, group) {
 
     if (length(d$tau) != length(d$qhat)) {
       stop(
-        "In disclosure[[", group, "]], length(tau) must equal length(qhat)."
+        "In disclosure[[", group,
+        "]], length(tau) must equal length(qhat)."
       )
     }
-    if (length(d$tau) == 0) {
-      stop("disclosure[[", group, "]]$tau must be non-empty.")
+
+    if (length(d$tau) == 0L) {
+      stop(
+        "disclosure[[", group,
+        "]]$tau must be non-empty."
+      )
     }
-    if (any(!is.finite(d$tau)) || any(!is.finite(d$qhat))) {
+
+    if (any(!is.finite(d$tau)) ||
+        any(!is.finite(d$qhat))) {
       stop(
         "tau and qhat must contain only finite values in disclosure[[",
         group, "]]."
       )
     }
+
     if (any(d$tau <= 0 | d$tau >= 1)) {
-      stop("All tau values must lie in (0, 1) in disclosure[[", group, "]].")
+      stop(
+        "All tau values must lie in (0, 1) in disclosure[[",
+        group, "]]."
+      )
     }
+
     if (is.unsorted(d$tau, strictly = TRUE)) {
-      stop("tau must be strictly increasing in disclosure[[", group, "]].")
+      stop(
+        "tau must be strictly increasing in disclosure[[",
+        group, "]]."
+      )
     }
+
     if (any(diff(d$qhat) < 0)) {
-      stop("qhat must be weakly increasing in disclosure[[", group, "]].")
+      stop(
+        "qhat must be weakly increasing in disclosure[[",
+        group, "]]."
+      )
     }
   }
 
+  # ---------------------------------------------------------------
+  # 3. Mean disclosure
+  # ---------------------------------------------------------------
+
   if (d$type %in% c("mean", "mean_quantile")) {
-    if (is.null(d$mean) ||
-        length(d$mean) != 1 ||
-        !is.finite(d$mean)) {
+
+    if (is.null(d$mean) || length(d$mean) != 1L) {
       stop(
         "Mean disclosure requires a finite scalar mean in disclosure[[",
         group, "]]."
       )
     }
 
-    d$mean <- as.numeric(d$mean)
-  }
+    d$mean <- suppressWarnings(as.numeric(d$mean))
 
-  if (d$type == "quantile") {
-    if (is.null(d$y_lower) || is.null(d$y_upper)) {
+    if (!is.finite(d$mean)) {
       stop(
-        "Quantile-only disclosure requires y_lower and y_upper in disclosure[[",
+        "Mean disclosure requires a finite scalar mean in disclosure[[",
         group, "]]."
       )
     }
   }
 
-  if (!is.null(d$y_lower)) {
-    if (length(d$y_lower) != 1 ||
-        !is.finite(d$y_lower)) {
-      stop("disclosure[[", group, "]]$y_lower must be a finite scalar.")
+  # ---------------------------------------------------------------
+  # 4. Support endpoints and support bounds
+  # ---------------------------------------------------------------
+
+  support_names <- c(
+    "y_lower",
+    "y_upper",
+    "y_lower_bound",
+    "y_upper_bound"
+  )
+
+  for (nm in support_names) {
+
+    if (!is.null(d[[nm]])) {
+
+      if (length(d[[nm]]) != 1L) {
+        stop(
+          "disclosure[[", group, "]]$", nm,
+          " must be a finite scalar."
+        )
+      }
+
+      value <- suppressWarnings(as.numeric(d[[nm]]))
+
+      if (!is.finite(value)) {
+        stop(
+          "disclosure[[", group, "]]$", nm,
+          " must be a finite scalar."
+        )
+      }
+
+      d[[nm]] <- value
     }
-    d$y_lower <- as.numeric(d$y_lower)
   }
 
-  if (!is.null(d$y_upper)) {
-    if (length(d$y_upper) != 1 ||
-        !is.finite(d$y_upper)) {
-      stop("disclosure[[", group, "]]$y_upper must be a finite scalar.")
-    }
-    d$y_upper <- as.numeric(d$y_upper)
+  # A lower support bound cannot exceed the exact lower endpoint.
+  if (!is.null(d[["y_lower"]]) &&
+      !is.null(d$y_lower_bound) &&
+      d$y_lower_bound > d[["y_lower"]]) {
+    stop(
+      "In disclosure[[", group,
+      "]], y_lower_bound must not exceed y_lower."
+    )
   }
 
-  if (!is.null(d$y_lower) && !is.null(d$y_upper)) {
-    if (d$y_lower > d$y_upper) {
-      stop(
-        "In disclosure[[", group,
-        "]], y_lower must be less than or equal to y_upper."
-      )
-    }
+  # An exact upper endpoint cannot exceed an upper support bound.
+  if (!is.null(d[["y_upper"]]) &&
+      !is.null(d$y_upper_bound) &&
+      d[["y_upper"]] > d$y_upper_bound) {
+    stop(
+      "In disclosure[[", group,
+      "]], y_upper must not exceed y_upper_bound."
+    )
   }
 
+  lower_for_bounds <- qlm_bounds_lower_for_bounds(d)
+  upper_for_bounds <- qlm_bounds_upper_for_bounds(d)
+
+  # Quantile-only disclosure requires enough information to bound
+  # both tails. Mean and mean-quantile disclosures do not, because
+  # their mean is directly reported.
   if (d$type == "quantile") {
-    if (d$qhat[1] < d$y_lower) {
+
+    if (is.null(lower_for_bounds) ||
+        is.null(upper_for_bounds)) {
+      stop(
+        "Quantile-only disclosure requires a lower endpoint or lower ",
+        "support bound and an upper endpoint or upper support bound in ",
+        "disclosure[[", group, "]]."
+      )
+    }
+  }
+
+  if (!is.null(lower_for_bounds) &&
+      !is.null(upper_for_bounds) &&
+      lower_for_bounds > upper_for_bounds) {
+    stop(
+      "In disclosure[[", group,
+      "]], the lower support value must not exceed the upper support value."
+    )
+  }
+
+  # ---------------------------------------------------------------
+  # 5. Compatibility of quantiles with support information
+  # ---------------------------------------------------------------
+
+  if (d$type %in% c("quantile", "mean_quantile")) {
+
+    if (!is.null(lower_for_bounds) &&
+        d$qhat[1L] < lower_for_bounds) {
       stop(
         "In disclosure[[", group,
-        "]], the first disclosed quantile must be greater than or equal to y_lower."
+        "]], the first disclosed quantile is below the maintained ",
+        "lower support value."
       )
     }
 
-    if (d$qhat[length(d$qhat)] > d$y_upper) {
+    if (!is.null(upper_for_bounds) &&
+        d$qhat[length(d$qhat)] > upper_for_bounds) {
       stop(
         "In disclosure[[", group,
-        "]], the last disclosed quantile must be less than or equal to y_upper."
+        "]], the last disclosed quantile exceeds the maintained ",
+        "upper support value."
+      )
+    }
+  }
+
+  # ---------------------------------------------------------------
+  # 6. Compatibility of a reported mean with support information
+  # ---------------------------------------------------------------
+
+  if (d$type %in% c("mean", "mean_quantile")) {
+
+    if (!is.null(lower_for_bounds) &&
+        d$mean < lower_for_bounds) {
+      stop(
+        "In disclosure[[", group,
+        "]], the reported mean is below the maintained lower ",
+        "support value."
+      )
+    }
+
+    if (!is.null(upper_for_bounds) &&
+        d$mean > upper_for_bounds) {
+      stop(
+        "In disclosure[[", group,
+        "]], the reported mean exceeds the maintained upper ",
+        "support value."
       )
     }
   }
@@ -598,17 +814,22 @@ validate_qlm_bounds_disclosure_one <- function(d, group) {
 }
 
 
-qlm_bounds_one_group <- function(qhat, tau, y_lower, y_upper) {
+qlm_bounds_one_group <- function(
+    qhat,
+    tau,
+    y_lower_bound,
+    y_upper_bound) {
+
   tau_full <- c(0, tau, 1)
-  q_full <- c(y_lower, qhat, y_upper)
+  q_full <- c(y_lower_bound, qhat, y_upper_bound)
 
   delta_tau <- diff(tau_full)
 
   m_lower <- sum(delta_tau * q_full[-length(q_full)])
   m_upper <- sum(delta_tau * q_full[-1])
 
-  weights_lower <- delta_tau[-length(delta_tau)]
-  weights_upper <- delta_tau[-1]
+  weights_lower <- delta_tau[-1L]
+  weights_upper <- delta_tau[-length(delta_tau)]
 
   list(
     m_lower = m_lower,
@@ -687,27 +908,35 @@ qlm_bounds_find_first_existing_name <- function(x, candidates) {
 #'   Mean rows require either a `mean` column or one disclosed-value column
 #'   named `value`, `qhat`, or `estimate`.
 #'
-#'   For quantile disclosures, support bounds must be supplied either
-#'   through columns `y_lower` and `y_upper` in `disclosure` or through
-#'   the function arguments `y_lower` and `y_upper`.
+#'   For quantile-only disclosures, the lower side of the support must be
+#'   specified through either `y_lower` or `y_lower_bound`, and the upper
+#'   side through either `y_upper` or `y_upper_bound`. These values may be
+#'   supplied through columns in `disclosure` or through the corresponding
+#'   function arguments.
 #' @param treatment Value of the `arm` column identifying treatment groups.
 #'   For example, if `arm` takes values `"case"` and `"control"`,
 #'   set `treatment = "case"`.
 #' @param control Value of the `arm` column identifying control groups.
 #'   For example, if `arm` takes values `"case"` and `"control"`,
 #'   set `control = "control"`.
-#' @param y_lower A scalar or numeric vector giving lower support endpoints.
-#'   This argument is passed to `qlm_bounds()` for both treatment and control
-#'   arms. For quantile disclosures, support bounds must be supplied either
-#'   through this argument and `y_upper`, or through columns `y_lower` and
-#'   `y_upper` in `disclosure`. If scalar, the same lower bound is used for
-#'   all groups.
-#' @param y_upper A scalar or numeric vector giving upper support endpoints.
-#'   This argument is passed to `qlm_bounds()` for both treatment and control
-#'   arms. For quantile disclosures, support bounds must be supplied either
-#'   through `y_lower` and this argument, or through columns `y_lower` and
-#'   `y_upper` in `disclosure`. If scalar, the same upper bound is used for
-#'   all groups.
+#' @param y_lower A scalar or numeric vector giving exact lower support
+#'   endpoints, if known. This argument is passed to `qlm_bounds()` for
+#'   both treatment and control arms. If scalar, the same lower endpoint
+#'   is used for all groups.
+#' @param y_upper A scalar or numeric vector giving exact upper support
+#'   endpoints, if known. This argument is passed to `qlm_bounds()` for
+#'   both treatment and control arms. If scalar, the same upper endpoint
+#'   is used for all groups.
+#' @param y_lower_bound A scalar or numeric vector giving known lower
+#'   bounds on the conditional outcome support when the exact lower
+#'   endpoints are not known. This argument is passed to `qlm_bounds()`
+#'   for both treatment and control arms. If scalar, the same lower bound
+#'   is used for all groups.
+#' @param y_upper_bound A scalar or numeric vector giving known upper
+#'   bounds on the conditional outcome support when the exact upper
+#'   endpoints are not known. This argument is passed to `qlm_bounds()`
+#'   for both treatment and control arms. If scalar, the same upper bound
+#'   is used for all groups.
 #'
 #' @return
 #' An object of class `"qlm_contrast_bounds"` containing:
@@ -776,7 +1005,9 @@ qlm_contrast_bounds <- function(disclosure,
                                 treatment,
                                 control,
                                 y_lower = NULL,
-                                y_upper = NULL) {
+                                y_upper = NULL,
+                                y_lower_bound = NULL,
+                                y_upper_bound = NULL) {
 
   if (!is.data.frame(disclosure)) {
     stop("disclosure must be a data.frame.")
@@ -862,13 +1093,17 @@ qlm_contrast_bounds <- function(disclosure,
   treat_bounds <- qlm_bounds(
     disclosure = treat_df,
     y_lower = y_lower,
-    y_upper = y_upper
+    y_upper = y_upper,
+    y_lower_bound = y_lower_bound,
+    y_upper_bound = y_upper_bound
   )
 
   control_bounds <- qlm_bounds(
     disclosure = control_df,
     y_lower = y_lower,
-    y_upper = y_upper
+    y_upper = y_upper,
+    y_lower_bound = y_lower_bound,
+    y_upper_bound = y_upper_bound
   )
 
   stopifnot(
